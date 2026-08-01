@@ -17,6 +17,13 @@
 
 현재 빌드는 가족 얼굴 크롭본을 포함한 공개 테스트 버전입니다. 가족이 사용 권한을 확인한 사진을 사용하며, 공개 저장소의 코드·크롭 이미지·raw 자산 URL은 누구나 접근할 수 있다는 점을 전제로 합니다. 가족 외 공유가 필요하지 않은 1주 테스트용 링크로 운영합니다.
 
+### 권리·라이선스 메모
+
+- 이 저장소에는 별도 `LICENSE` 파일을 추가하지 않았습니다. 따라서 프로젝트 코드와 자체 제작 이미지의 재사용 권한을 자동으로 부여하지 않습니다.
+- Pretendard는 원저작권자의 SIL Open Font License 1.1로 배포되는 외부 글꼴이며, 현재는 CDN으로 불러옵니다. [Pretendard 라이선스](https://github.com/orioncactus/pretendard/blob/main/LICENSE)
+- 얼굴 사진은 가족이 공개 테스트 사용을 허락한 자산입니다. SNS에 게시된 사실만으로 모든 재사용 권리가 자동 보장되는 것은 아니며, 공개 테스트 종료 후 계속 공개할지 다시 확인합니다.
+- GitHub Pages 사이트는 공개 인터넷에서 접근 가능합니다. [GitHub Pages 공개 범위 안내](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
+
 ## 게임 룰
 
 - 첫 행동은 반드시 `열기`입니다. 첫 칸과 주변 칸은 안전합니다.
