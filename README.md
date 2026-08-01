@@ -5,8 +5,10 @@
 ## GitHub 배포 및 1주 테스트
 
 - 배포 저장소: https://github.com/ljwkck-ship-it/jian-finder
+- GitHub Pages: https://ljwkck-ship-it.github.io/jian-finder/
 - 저장소 공개 범위: 공개
 - 배포 브랜치: `main`
+- Pages 소스: `main` 브랜치 루트(`/`)
 - 배포 버전: `v1.0.0-test-public`
 - 배포일: 2026-08-01
 - 테스트 기간: 2026-08-01 ~ 2026-08-08
