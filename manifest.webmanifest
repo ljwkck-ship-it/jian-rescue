@@ -1,12 +1,12 @@
 {
-  "name": "Jian Finder",
-  "short_name": "Jian",
-  "description": "숨어 있는 지안이를 숫자 단서로 모두 찾는 가족용 퍼즐 게임",
+  "name": "Jian Rescue",
+  "short_name": "Jian Rescue",
+  "description": "위험한 퍼즐 보드에서 지안이를 안전하게 구하는 가족용 퍼즐 게임",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#fff8fb",
-  "theme_color": "#ffe7ef",
+  "background_color": "#f4f0df",
+  "theme_color": "#a9d9d0",
   "icons": [
     {
       "src": "assets/icon-192.png",

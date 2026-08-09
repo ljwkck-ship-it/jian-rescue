@@ -1,69 +1,66 @@
 import {
-  DIFFICULTIES,
   clampLevel,
   createGame,
-  getDifficultyConfig,
+  expireGame,
   getFoundJianMarks,
   getMaxLevel,
   openCell,
   toggleFlag,
+  toggleHazardMark,
   useHint,
-} from "./game.js";
+} from "./game.js?v=21";
 
-const STORAGE_KEY = "jian-finder-best-times-v1";
-const LEGACY_LEVEL_KEY = "jian-finder-current-level-v1";
-const LEVELS_KEY = "jian-finder-levels-by-difficulty-v1";
+const STORAGE_KEY = "jian-rescue-best-times-v3";
+const LEVEL_KEY = "jian-rescue-current-level-v3";
 const HINT_PENALTY_SECONDS = 5;
+const IDLE_HINT_DELAY_MS = 18_000;
 const FACE_SRCS = Array.from({ length: 10 }, (_, index) =>
   `assets/faces/face-${String(index + 1).padStart(2, "0")}.png`,
 );
 
 const boardEl = document.querySelector("#board");
-const difficultyButtons = Array.from(document.querySelectorAll("[data-difficulty]"));
 const newGameEl = document.querySelector("#new-game");
-const hintButtonEl = document.querySelector("#use-hint");
 const installAppEl = document.querySelector("#install-app");
 const installDialogEl = document.querySelector("#install-dialog");
 const levelEl = document.querySelector("#level");
-const remainingEl = document.querySelector("#remaining");
+const jianProgressEl = document.querySelector("#jian-progress");
+const hazardProgressEl = document.querySelector("#hazard-progress");
 const timerEl = document.querySelector("#timer");
 const bestTimeEl = document.querySelector("#best-time");
 const messageEl = document.querySelector("#message");
-const openModeEl = document.querySelector("#open-mode");
-const flagModeEl = document.querySelector("#flag-mode");
+const missionEl = document.querySelector("#mission");
+const quickHintEl = document.querySelector("#quick-hint");
+const quickHintCountEl = document.querySelector("#quick-hint-count");
 
-let currentDifficulty = "beginner";
-let currentLevel = readCurrentLevel(currentDifficulty);
-let game = createGame(currentDifficulty, currentLevel);
-let inputMode = "open";
+let currentLevel = readCurrentLevel();
+let game = createGame(currentLevel);
 let focused = { row: 0, col: 0 };
 let timerId = null;
 let currentFaceSrc = getFaceForLevel(currentLevel);
 let deferredInstallPrompt = null;
-const faceAvailability = new Map();
+let longPressTimer = null;
+let longPressHandled = false;
+let levelAdvanceTimer = null;
+let boardMode = "open";
+let idleHintTimer = null;
+let hintSuggested = false;
 
-preloadFace(currentFaceSrc);
-
-function startNewGame(difficultyKey = currentDifficulty, options = { advanceLevel: false }) {
+function startNewGame(options = { advanceLevel: false }) {
+  if (levelAdvanceTimer) window.clearTimeout(levelAdvanceTimer);
+  levelAdvanceTimer = null;
   stopTimer();
-  currentDifficulty = difficultyKey;
-  const maxLevel = getMaxLevel(difficultyKey);
+  clearIdleHint();
+  const maxLevel = getMaxLevel();
   if (options.advanceLevel && currentLevel < maxLevel) currentLevel += 1;
-  currentLevel = clampLevel(difficultyKey, currentLevel);
-  saveCurrentLevel(difficultyKey, currentLevel);
+  currentLevel = clampLevel(currentLevel);
+  saveCurrentLevel(currentLevel);
   currentFaceSrc = getFaceForLevel(currentLevel);
-  preloadFace(currentFaceSrc);
-  game = createGame(difficultyKey, currentLevel);
+  game = createGame(currentLevel);
+  boardMode = "open";
+  updateBoardModeControls();
   focused = { row: 0, col: 0 };
-  newGameEl.textContent = "같은 레벨 재도전";
-  setMessage(
-    `${game.config.label} 레벨 ${currentLevel}/${maxLevel}: 지안이 ${game.config.jianCount}명을 모두 찾으세요. 폭탄 ${game.config.bombCount}개는 열거나 잘못 표시하면 실패합니다. ${
-      currentLevel >= maxLevel
-        ? "폭탄을 피하고 마지막 레벨을 클리어하세요."
-        : "폭탄을 피해서 모두 찾아야 다음 레벨로 넘어갑니다."
-    }`,
-  );
-  updateDifficultyOptions();
+  newGameEl.textContent = "새 구조 작전";
+  setMessage(getHazardStory(game.config.hazard));
   render();
 }
 
@@ -71,13 +68,23 @@ function startTimerIfNeeded() {
   if (timerId || game.status !== "playing") return;
   game.startedAt = Date.now();
   timerId = window.setInterval(() => {
-    if (game.status !== "playing") {
-      stopTimer();
-      return;
-    }
-    game.elapsedSeconds = Math.floor((Date.now() - game.startedAt) / 1000);
-    timerEl.textContent = String(game.elapsedSeconds);
+    if (game.status !== "playing") return stopTimer();
+    updateClock();
   }, 250);
+  scheduleIdleHint();
+}
+
+function updateClock() {
+  const playedSeconds = Math.floor((Date.now() - game.startedAt) / 1000);
+  game.elapsedSeconds = playedSeconds + game.hintsUsed * HINT_PENALTY_SECONDS;
+  game.remainingSeconds = Math.max(game.config.timeLimitSeconds - game.elapsedSeconds, 0);
+  timerEl.textContent = formatDuration(game.remainingSeconds);
+  timerEl.closest(".stat")?.classList.toggle("is-urgent", game.remainingSeconds <= 15);
+  if (game.remainingSeconds === 0) {
+    expireGame(game);
+    handleTerminalState();
+    render();
+  }
 }
 
 function stopTimer() {
@@ -86,89 +93,158 @@ function stopTimer() {
 }
 
 function handleOpen(row, col) {
+  clearLogicalHint();
+  notePlayerAction();
   const wasReady = game.status === "ready";
+  const foundBefore = getFoundJianMarks(game);
   openCell(game, row, col);
-  if (wasReady && game.status === "playing") startTimerIfNeeded();
+  const foundAfter = getFoundJianMarks(game);
+  if (foundAfter > foundBefore) showJianRescuedEffect(foundAfter, game.config.jianCount);
+  if (wasReady && game.status === "playing") {
+    startTimerIfNeeded();
+    setMessage(game.config.tutorial ? "튜토리얼 2/3 · 빛나는 지안 칸을 열어 구조하세요." : `찍지 않아도 풀 수 있는 판이에요. ${getHazardStory(game.config.hazard)}`);
+  } else if (wasReady && game.lastActionReason === "tutorial-start") {
+    setMessage("튜토리얼 1/3 · 먼저 빛나는 2행 2열 칸을 열어 단서를 확인하세요.");
+    game.lastActionReason = null;
+  } else if (game.config.tutorial && foundAfter > foundBefore && game.status === "playing") {
+    setMessage(`튜토리얼 3/3 · 지안을 구했어요. 위험 표시 모드로 바꿔 빛나는 ${game.config.hazard.label} 칸을 표시하세요.`);
+  }
   handleTerminalState();
   render();
 }
 
-function handleFlag(row, col) {
+function handleMark(row, col, mode) {
+  clearLogicalHint();
+  notePlayerAction();
   const wasReady = game.status === "ready";
-  const previousFlags = game.flags;
-  toggleFlag(game, row, col);
-  if (wasReady) {
-    setMessage("첫 행동은 열기입니다. 숫자를 본 뒤 확실한 칸에만 지안 표시를 하세요.");
-  } else if (game.status === "playing" && game.flags > previousFlags) {
-    setMessage(`${game.combo}연속 정확한 찾기 · 정확한 찾기 +1${game.combo >= 3 ? " · 3연속 성공!" : ""}`);
-  } else if (game.status === "playing" && game.flags < previousFlags) {
-    setMessage("지안 표시를 해제했습니다. 숫자 단서를 다시 확인하세요.");
+  const before = mode === "jian" ? game.flags : game.hazardMarks;
+  if (mode === "jian") toggleFlag(game, row, col);
+  else toggleHazardMark(game, row, col);
+  const after = mode === "jian" ? game.flags : game.hazardMarks;
+  if (wasReady) setMessage("첫 행동은 열기예요. 첫 안전 칸을 열고 단서를 확인하세요.");
+  else if (game.status === "playing" && after > before) {
+    setMessage(game.config.tutorial ? (mode === "jian" ? "튜토리얼 2/3 · 지안 위치를 찾았어요!" : `튜토리얼 3/3 · ${game.config.hazard.label}로 의심되는 칸을 표시했어요. 표시는 언제든 다시 눌러 지울 수 있어요.`) : (mode === "jian" ? "지안 위치를 표시했어요. 계속 구조하세요!" : `${game.config.hazard.emoji} 위험 후보를 표시했어요. 단서가 맞지 않으면 다시 눌러 지우세요.`));
+  } else if (game.status === "playing" && after < before) {
+    setMessage("표시를 지웠어요. 단서를 다시 확인해 보세요.");
+  } else if (game.status === "playing" && mode === "hazard" && before >= game.config.hazardCount) {
+    setMessage(`위험 표시는 ${game.config.hazardCount}곳까지 할 수 있어요. 기존 표시를 다시 눌러 지운 뒤 바꿔 보세요.`);
   }
   handleTerminalState();
   render();
 }
 
 function handleHint() {
-  if (!game.firstClickDone) {
-    setMessage("힌트는 첫 칸을 연 뒤 사용할 수 있습니다.");
-    return;
-  }
-  const cell = useHint(game);
-  if (!cell) {
-    setMessage("이번 레벨의 돋보기 힌트를 모두 사용했습니다.");
-    return;
-  }
-  setMessage(`돋보기 힌트: ${cell.row + 1}행 ${cell.col + 1}열을 안전한 칸으로 공개했습니다. 기록에는 +${HINT_PENALTY_SECONDS}s가 더해집니다.`);
+  notePlayerAction();
+  if (!game.firstClickDone) return setMessage("첫 칸을 열면 논리 힌트를 사용할 수 있어요.");
+  const hint = useHint(game);
+  if (!hint) return setMessage("현재 열린 단서에서 제안할 논리 힌트가 없어요. 표시를 다시 확인하거나 칸을 더 열어 보세요.");
+  if (hint.consumed) updateClock();
+  if (hint.stage === 1) setMessage(`논리 힌트 1/3 · ${hint.sourcePosition}의 단서를 먼저 살펴보세요. 힌트 1회를 사용했고 시간 ${HINT_PENALTY_SECONDS}초가 줄었어요.`);
+  else if (hint.stage === 2) setMessage(`논리 힌트 2/3 · ${hint.sourcePosition}의 숫자와 ${hint.targetPosition}을 포함한 남은 후보 칸 수를 비교해 보세요.`);
+  else setMessage(`논리 힌트 3/3 · ${hint.explanation} 이제 직접 실행해 보세요: ${hint.action}`);
+  scheduleIdleHint();
   render();
 }
 
 function handleTerminalState() {
-  if (game.status === "won") {
+  if (game.status === "won" && !game.completionHandled) {
+    game.completionHandled = true;
     stopTimer();
-    const finalSeconds = game.elapsedSeconds;
-    const recordSeconds = finalSeconds + game.hintsUsed * HINT_PENALTY_SECONDS;
-    const isBest = saveBestTime(game.difficultyKey, currentLevel, recordSeconds);
-    const maxLevel = getMaxLevel(game.difficultyKey);
+    const recordSeconds = game.elapsedSeconds;
+    const isBest = saveBestTime(currentLevel, recordSeconds);
+    const maxLevel = getMaxLevel();
     const isFinalLevel = currentLevel >= maxLevel;
-    newGameEl.textContent = isFinalLevel ? "마지막 레벨 재도전" : "다음 레벨";
-    setMessage(
-      `${game.config.label} 레벨 ${currentLevel}/${maxLevel} 성공. 지안이 ${game.config.jianCount}명을 ${finalSeconds}s 만에 모두 찾았습니다.${
-        game.hintsUsed > 0 ? ` 힌트 ${game.hintsUsed}회로 기록 시간은 ${recordSeconds}s입니다.` : ""
-      }${
-        isBest ? " 신기록입니다." : ""
-      }${isFinalLevel ? " 마지막 레벨입니다." : " 다음 레벨로 넘어갈 수 있습니다."}`,
-    );
+    newGameEl.textContent = isFinalLevel ? "마지막 작전 재도전" : "다음 구조 작전";
+    showSuccessEffect(isFinalLevel);
+    clearIdleHint();
+    setMessage(`구조 성공! ${formatDuration(recordSeconds)} 만에 지안 ${game.config.jianCount}명을 구하고 위험 ${game.config.hazardCount}곳을 모두 표시했어요.${isBest ? " 이 레벨의 새로운 최단 기록이에요!" : ""}${isFinalLevel ? " 마지막 구조 작전 완료!" : " 다음 작전으로 곧 출발해요."}`);
+    if (!isFinalLevel) {
+      levelAdvanceTimer = window.setTimeout(() => {
+        startNewGame({ advanceLevel: true });
+      }, 1800);
+    }
   }
-
   if (game.status === "lost") {
     stopTimer();
-    newGameEl.textContent = "같은 레벨 재도전";
-    setMessage("실패했습니다. 폭탄 칸을 열었거나, 지안이가 아닌 칸에 표시해 폭탄이 터졌습니다. 다음 레벨로 넘어가지 않습니다.");
+    clearIdleHint();
+    newGameEl.textContent = "같은 작전 재도전";
+    setMessage(game.lossReason === "timeout" ? `시간 종료 · 제한 시간 ${formatDuration(game.config.timeLimitSeconds)} 안에 구조하지 못했어요. 같은 레벨에서 다시 시도해 보세요.` : `작전 실패. ${game.config.hazard.label}을 열었어요. 공개된 위치와 주변 단서를 확인하고 다시 시도해 보세요.`);
   }
+}
+
+function showSuccessEffect(isFinalLevel) {
+  document.querySelector(".success-burst")?.remove();
+  const effect = document.createElement("div");
+  effect.className = "success-burst";
+  effect.setAttribute("role", "status");
+  effect.innerHTML = `<div class="success-burst-card"><span class="success-crown">${isFinalLevel ? "👑" : "🎉"}</span><strong>${isFinalLevel ? "모든 구조 작전 완료!" : "지안 구조 성공!"}</strong><small>${isFinalLevel ? "오늘의 구조대, 최고예요." : "다음 레벨로 출발해요"}</small></div><i></i><i></i><i></i><i></i><i></i><i></i>`;
+  document.body.appendChild(effect);
+  window.setTimeout(() => effect.remove(), 1700);
+}
+
+function showJianRescuedEffect(found, total) {
+  document.querySelector(".jian-rescue-pop")?.remove();
+  const pop = document.createElement("div");
+  pop.className = "jian-rescue-pop";
+  pop.setAttribute("role", "status");
+  pop.textContent = `🎈 지안 구조 완료! ${found}/${total}`;
+  document.body.appendChild(pop);
+  window.setTimeout(() => pop.remove(), 1050);
 }
 
 function render() {
   boardEl.style.setProperty("--columns", String(game.config.cols));
-  boardEl.dataset.difficulty = game.difficultyKey;
-  document.body.dataset.difficulty = game.difficultyKey;
-  boardEl.setAttribute("aria-rowcount", String(game.config.rows));
-  boardEl.setAttribute("aria-colcount", String(game.config.cols));
-  levelEl.textContent = `${currentLevel}/${getMaxLevel(game.difficultyKey)}`;
-  remainingEl.textContent = `${getFoundJianMarks(game)}/${game.config.jianCount}`;
-  timerEl.textContent = String(game.elapsedSeconds);
-  bestTimeEl.textContent = formatBestTime(game.difficultyKey, currentLevel);
-  const hintsRemaining = Math.max(game.config.hintCount - game.hintsUsed, 0);
-  hintButtonEl.textContent = `돋보기 ${hintsRemaining}회`;
-  hintButtonEl.disabled = game.status !== "playing" || hintsRemaining === 0;
+  boardEl.dataset.boardSize = String(game.config.cols);
+  boardEl.style.setProperty("--cell", game.config.cols >= 14 ? "34px" : game.config.cols >= 10 ? "clamp(32px, 7vw, 40px)" : "clamp(34px, 8.5vw, 46px)");
+  levelEl.textContent = `${currentLevel}/${getMaxLevel()}`;
+  jianProgressEl.textContent = `${getFoundJianMarks(game)}/${game.config.jianCount}`;
+  hazardProgressEl.textContent = `${game.hazardMarks}/${game.config.hazardCount}`;
+  setProgressColor(levelEl, currentLevel, getMaxLevel());
+  setProgressColor(jianProgressEl, getFoundJianMarks(game), game.config.jianCount);
+  setProgressColor(hazardProgressEl, game.hazardMarks, game.config.hazardCount);
+  timerEl.textContent = formatDuration(game.remainingSeconds);
+  timerEl.closest(".stat")?.classList.toggle("is-urgent", game.status === "playing" && game.remainingSeconds <= 15);
+  bestTimeEl.textContent = formatBestTime(currentLevel);
+  renderMission();
 
   const fragment = document.createDocumentFragment();
-  for (const row of game.board) {
-    for (const cell of row) {
-      fragment.appendChild(renderCell(cell));
-    }
-  }
-
+  for (const row of game.board) for (const cell of row) fragment.appendChild(renderCell(cell));
   boardEl.replaceChildren(fragment);
+}
+
+function renderMission() {
+  const { hazard, jianCount, hazardCount } = game.config;
+  const hintsRemaining = Math.max(game.config.hintCount - game.hintsUsed, 0);
+  const activeHintStep = game.activeHint?.stage ?? 0;
+  const canContinueHint = activeHintStep > 0 && activeHintStep < 3;
+  const hintDisabled = game.status !== "playing" || (!canContinueHint && hintsRemaining === 0);
+  const hintAriaAction = activeHintStep >= 3
+    ? "새 힌트 시작"
+    : activeHintStep
+      ? `${activeHintStep + 1}단계 보기`
+      : "시작";
+  quickHintEl.disabled = hintDisabled;
+  quickHintEl.classList.toggle("is-suggested", hintSuggested);
+  quickHintEl.setAttribute("aria-label", hintDisabled ? "논리 힌트 사용 불가" : `논리 힌트 ${hintAriaAction}, ${hintsRemaining}회 남음`);
+  quickHintCountEl.textContent = activeHintStep ? `${activeHintStep}/3` : game.firstClickDone ? String(hintsRemaining) : "–";
+  const tutorial = game.config.tutorial ? `<ol class="tutorial-steps"><li><b>1</b> 지정 칸 열기</li><li><b>2</b> 지안 구조</li><li><b>3</b> 위험 표시</li></ol>` : "";
+  const hintGuide = activeHintStep === 3
+    ? "결론을 확인했어요. 게임판에서 직접 실행해 보세요"
+    : activeHintStep
+      ? "한 번 더 누르면 다음 설명을 보여줘요"
+      : `단서 → 후보 → 결론 · ${hintsRemaining}회 남음 · 시간 −5초`;
+  missionEl.innerHTML = `<div class="mission-kicker">${game.config.tutorial ? "TUTORIAL · 고정 연습판" : `PURE LOGIC · LEVEL ${currentLevel}`}</div><div class="mission-target"><img src="${currentFaceSrc}" alt="구해야 할 지안의 얼굴" width="52" height="52" /><div><span>구해야 할 지안</span><strong>지안 <b>${jianCount}</b>명</strong></div></div><div class="mission-arrow" aria-hidden="true">＋</div><div class="mission-danger"><span class="danger-emoji" aria-hidden="true">${hazard.emoji}</span><div><span>표시해야 할 위험</span><strong>${hazard.label} <b>${hazardCount}</b>곳</strong><small>${hazard.rule} 단서</small></div></div><button id="use-helper" class="helper-item${hintSuggested ? " is-suggested" : ""}" type="button" ${hintDisabled ? "disabled" : ""} aria-label="논리 힌트 사용"><img src="assets/momo-safety-lantern.png" alt="" width="36" height="36" /><span><b>논리 힌트${activeHintStep ? ` ${activeHintStep}/3` : ""}</b><small>${game.firstClickDone ? hintGuide : "첫 칸을 열면 사용할 수 있어요"}</small></span></button><p>${getHazardStory(hazard)} 위험 숫자는 <b>${hazard.rule}</b>에서 세요.</p>${tutorial}`;
+}
+
+function getHazardStory(hazard) {
+  const stories = {
+    puddle: "비가 내려 길 곳곳에 웅덩이가 생겼어요. 지안이 젖지 않게 찾아요.",
+    wind: "바람이 세게 불어요. 바람길을 피해 지안을 찾아요.",
+    poop: "산책길에 조심해야 할 곳이 생겼어요. 발밑을 살피며 찾아요.",
+    spider: "거미줄이 길을 막고 있어요. 얽히지 않게 지안에게 가요.",
+    snake: "풀숲에서 뱀이 움직이고 있어요. 조심해서 지안에게 다가가요.",
+  };
+  return stories[hazard.key] ?? `${hazard.label}을 피해 지안을 찾아요.`;
 }
 
 function renderCell(cell) {
@@ -181,264 +257,143 @@ function renderCell(cell) {
   button.setAttribute("aria-rowindex", String(cell.row + 1));
   button.setAttribute("aria-colindex", String(cell.col + 1));
   button.tabIndex = cell.row === focused.row && cell.col === focused.col ? 0 : -1;
-
   if (cell.isOpen) button.classList.add("is-open");
   if (cell.isFlagged && !cell.isOpen) button.classList.add("is-flagged");
+  if (cell.isHazardMarked && !cell.isOpen) button.classList.add("is-hazard-marked");
   if (cell.isWrongFlag) button.classList.add("is-wrong-flag");
   if (cell.isHinted) button.classList.add("is-hinted");
+  if (cell.isHintSource) button.classList.add("is-hint-source");
+  if (cell.isHintTarget) button.classList.add("is-hint-target");
+  const tutorialTarget = getTutorialTarget();
+  if (tutorialTarget && cell.row === tutorialTarget.row && cell.col === tutorialTarget.col) button.classList.add("is-tutorial-target");
 
   if (cell.isOpen && cell.hasBomb) {
-    button.classList.add("is-bomb");
-    button.innerHTML = `
-      <svg class="bomb-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-        <path class="bomb-spark" d="M45 7l3 8 8-3-5 7 7 5-9 1 1 9-6-7-7 5 3-8-8-3 9-2z"/>
-        <path class="bomb-fuse" d="M40 18c6-7 12-7 18-1" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
-        <circle class="bomb-body" cx="29" cy="37" r="20"/>
-        <circle class="bomb-shine" cx="21" cy="29" r="5"/>
-      </svg>
-    `;
+    button.classList.add("is-hazard");
+    button.innerHTML = `<span aria-hidden="true">${game.config.hazard.emoji}</span>`;
   } else if (cell.isOpen && cell.hasJian) {
     button.classList.add("is-jian");
-    if (faceAvailability.get(currentFaceSrc) !== false) {
-      const img = document.createElement("img");
-      img.src = currentFaceSrc;
-      img.alt = "";
-      img.decoding = "async";
-      button.appendChild(img);
-    } else {
-      button.classList.add("is-fallback-jian");
-      button.textContent = "";
-    }
-  } else if (cell.isOpen && (cell.adjacentCount > 0 || cell.adjacentBombCount > 0)) {
-    const jianCount = document.createElement("span");
-    jianCount.className = `clue-jian n${cell.adjacentCount}`;
-    jianCount.textContent = String(cell.adjacentCount);
-    jianCount.setAttribute("aria-hidden", "true");
-    const bombCount = document.createElement("span");
-    bombCount.className = "clue-bomb";
-    bombCount.textContent = `💣${cell.adjacentBombCount}`;
-    bombCount.setAttribute("aria-hidden", "true");
-    button.append(jianCount, bombCount);
+    const img = document.createElement("img");
+    img.src = currentFaceSrc;
+    img.alt = "";
+    button.appendChild(img);
+  } else if (cell.isOpen && (cell.adjacentCount || cell.adjacentBombCount)) {
+    button.innerHTML = `<span class="clue-jian n${cell.adjacentCount}">${cell.adjacentCount}</span><span class="clue-hazard">${game.config.hazard.emoji}${cell.adjacentBombCount}</span>`;
   }
-
   button.setAttribute("aria-label", describeCell(cell));
   return button;
 }
 
 function describeCell(cell) {
-  if (cell.isWrongFlag) return `${cell.row + 1}행 ${cell.col + 1}열, 잘못된 표시`;
-  if (cell.isHinted) return `${cell.row + 1}행 ${cell.col + 1}열, 힌트로 공개된 안전 칸`;
-  if (cell.isFlagged && !cell.isOpen) return `${cell.row + 1}행 ${cell.col + 1}열, 표시됨`;
-  if (!cell.isOpen) return `${cell.row + 1}행 ${cell.col + 1}열, 닫힘`;
-  if (cell.hasBomb) return `${cell.row + 1}행 ${cell.col + 1}열, 폭탄 칸`;
-  if (cell.hasJian) return `${cell.row + 1}행 ${cell.col + 1}열, 지안 칸`;
-  if (cell.adjacentCount === 0 && cell.adjacentBombCount === 0) {
-    return `${cell.row + 1}행 ${cell.col + 1}열, 빈 안전 칸`;
-  }
-  return `${cell.row + 1}행 ${cell.col + 1}열, 주변 지안 ${cell.adjacentCount}개, 폭탄 ${cell.adjacentBombCount}개`;
+  const position = `${cell.row + 1}행 ${cell.col + 1}열`;
+  if (cell.isWrongFlag) return `${position}, 잘못된 표시`;
+  if (cell.isFlagged && !cell.isOpen) return `${position}, 지안 표시됨`;
+  if (cell.isHazardMarked && !cell.isOpen) return `${position}, 위험 표시됨`;
+  if (!cell.isOpen) return `${position}, 닫힘`;
+  if (cell.hasBomb) return `${position}, ${game.config.hazard.label}`;
+  if (cell.hasJian) return `${position}, 지안`;
+  return `${position}, 주변 지안 ${cell.adjacentCount}명, 주변 ${game.config.hazard.label} ${cell.adjacentBombCount}곳`;
 }
 
-function setInputMode(nextMode) {
-  inputMode = nextMode;
-  openModeEl.classList.toggle("is-active", inputMode === "open");
-  flagModeEl.classList.toggle("is-active", inputMode === "flag");
-  openModeEl.setAttribute("aria-pressed", String(inputMode === "open"));
-  flagModeEl.setAttribute("aria-pressed", String(inputMode === "flag"));
+function setMessage(message) { messageEl.textContent = message; }
+function getTutorialTarget() {
+  if (!game.config.tutorial || game.status === "won") return null;
+  if (!game.firstClickDone) return { row: 1, col: 1 };
+  if (getFoundJianMarks(game) < game.config.jianCount) return { row: 0, col: 3 };
+  return { row: 3, col: 3 };
 }
-
-function setMessage(message) {
-  messageEl.textContent = message;
-}
-
-function readBestTimes() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
-  } catch {
-    return {};
+function clearLogicalHint() {
+  game.activeHint = null;
+  for (const cell of game.board.flat()) {
+    cell.isHintSource = false;
+    cell.isHintTarget = false;
   }
 }
-
-function bestTimeKey(difficultyKey, level) {
-  return `${difficultyKey}:${level}`;
+function setProgressColor(element, value, total) {
+  const ratio = total > 0 ? Math.min(Math.max(value / total, 0), 1) : 0;
+  const hue = Math.round(164 - ratio * 154);
+  element.style.setProperty("--progress-color", `hsl(${hue} 58% 36%)`);
 }
-
-function saveBestTime(difficultyKey, level, seconds) {
-  const bestTimes = readBestTimes();
-  const key = bestTimeKey(difficultyKey, level);
-  if (typeof bestTimes[key] === "number" && bestTimes[key] <= seconds) {
-    return false;
-  }
-  bestTimes[key] = seconds;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(bestTimes));
-  return true;
+function formatDuration(seconds) {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  return `${minutes}:${String(safeSeconds % 60).padStart(2, "0")}`;
 }
-
-function formatBestTime(difficultyKey, level) {
-  const bestTimes = readBestTimes();
-  const best = bestTimes[bestTimeKey(difficultyKey, level)] ?? bestTimes[difficultyKey];
-  return typeof best === "number" ? `${best}초` : "-";
+function clearIdleHint() {
+  if (idleHintTimer) window.clearTimeout(idleHintTimer);
+  idleHintTimer = null;
+  hintSuggested = false;
 }
-
-function readCurrentLevel(difficultyKey) {
-  const levels = readStoredLevels();
-  const stored = Number(levels[difficultyKey]);
-  if (Number.isSafeInteger(stored) && stored > 0) return clampLevel(difficultyKey, stored);
-
-  if (difficultyKey === "beginner") {
-    const legacy = Number(localStorage.getItem(LEGACY_LEVEL_KEY));
-    if (Number.isSafeInteger(legacy) && legacy > 0) return clampLevel(difficultyKey, legacy);
-  }
-
-  return 1;
+function scheduleIdleHint() {
+  clearIdleHint();
+  const hintsRemaining = game.config.hintCount - game.hintsUsed;
+  if (game.status !== "playing" || hintsRemaining <= 0) return;
+  idleHintTimer = window.setTimeout(() => {
+    if (game.status !== "playing") return;
+    hintSuggested = true;
+    setMessage(`막혔나요? 논리 힌트가 단서 → 후보 → 결론 순서로 도와줘요. ${hintsRemaining}회 남았고, 시작하면 시간이 ${HINT_PENALTY_SECONDS}초 줄어요.`);
+    renderMission();
+  }, IDLE_HINT_DELAY_MS);
 }
-
-function readStoredLevels() {
-  try {
-    return JSON.parse(localStorage.getItem(LEVELS_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
+function notePlayerAction() {
+  if (game.status === "playing") scheduleIdleHint();
 }
-
-function saveCurrentLevel(difficultyKey, level) {
-  const levels = readStoredLevels();
-  levels[difficultyKey] = clampLevel(difficultyKey, level);
-  localStorage.setItem(LEVELS_KEY, JSON.stringify(levels));
-}
-
-function getFaceForLevel(level) {
-  return FACE_SRCS[(level - 1) % FACE_SRCS.length];
-}
-
-function preloadFace(src) {
-  if (faceAvailability.has(src)) return;
-  const probe = new Image();
-  probe.onload = () => {
-    faceAvailability.set(src, true);
-    render();
-  };
-  probe.onerror = () => {
-    faceAvailability.set(src, false);
-    render();
-  };
-  probe.src = src;
-}
+function readBestTimes() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}"); } catch { return {}; } }
+function bestTimeKey(level) { return `level:${level}`; }
+function saveBestTime(level, seconds) { const all = readBestTimes(); const key = bestTimeKey(level); if (typeof all[key] === "number" && all[key] <= seconds) return false; all[key] = seconds; localStorage.setItem(STORAGE_KEY, JSON.stringify(all)); return true; }
+function formatBestTime(level) { const best = readBestTimes()[bestTimeKey(level)]; return typeof best === "number" ? formatDuration(best) : "기록 없음"; }
+function readCurrentLevel() { const value = Number(localStorage.getItem(LEVEL_KEY)); return Number.isSafeInteger(value) && value > 0 ? clampLevel(value) : 1; }
+function saveCurrentLevel(level) { localStorage.setItem(LEVEL_KEY, String(level)); }
+function getFaceForLevel(level) { return FACE_SRCS[(level - 1) % FACE_SRCS.length]; }
 
 boardEl.addEventListener("click", (event) => {
-  const target = event.target.closest(".cell");
-  if (!target) return;
-  const row = Number(target.dataset.row);
-  const col = Number(target.dataset.col);
-  focused = { row, col };
-  if (inputMode === "flag") handleFlag(row, col);
+  const target = event.target.closest(".cell"); if (!target) return;
+  if (longPressHandled) { longPressHandled = false; return; }
+  const row = Number(target.dataset.row); const col = Number(target.dataset.col); focused = { row, col };
+  if (boardMode === "hazard") handleMark(row, col, "hazard");
   else handleOpen(row, col);
 });
-
-boardEl.addEventListener("contextmenu", (event) => {
-  const target = event.target.closest(".cell");
-  if (!target) return;
-  event.preventDefault();
-  const row = Number(target.dataset.row);
-  const col = Number(target.dataset.col);
-  focused = { row, col };
-  handleFlag(row, col);
+boardEl.addEventListener("contextmenu", (event) => { const target = event.target.closest(".cell"); if (!target) return; event.preventDefault(); if (longPressHandled) return; focused = { row: Number(target.dataset.row), col: Number(target.dataset.col) }; handleMark(focused.row, focused.col, "hazard"); });
+boardEl.addEventListener("pointerdown", (event) => {
+  if (event.pointerType !== "touch") return;
+  const target = event.target.closest(".cell"); if (!target) return;
+  longPressHandled = false;
+  const row = Number(target.dataset.row); const col = Number(target.dataset.col);
+  longPressTimer = window.setTimeout(() => { longPressHandled = true; focused = { row, col }; handleMark(row, col, "hazard"); }, 520);
 });
-
+boardEl.addEventListener("pointerup", () => { if (longPressTimer) window.clearTimeout(longPressTimer); longPressTimer = null; });
+boardEl.addEventListener("pointercancel", () => { if (longPressTimer) window.clearTimeout(longPressTimer); longPressTimer = null; });
 boardEl.addEventListener("keydown", (event) => {
-  const { rows, cols } = game.config;
-  let handled = true;
-  if (event.key === "ArrowUp") focused.row = Math.max(0, focused.row - 1);
-  else if (event.key === "ArrowDown") focused.row = Math.min(rows - 1, focused.row + 1);
-  else if (event.key === "ArrowLeft") focused.col = Math.max(0, focused.col - 1);
-  else if (event.key === "ArrowRight") focused.col = Math.min(cols - 1, focused.col + 1);
-  else if (event.key === "Enter" || event.key === " ") handleOpen(focused.row, focused.col);
-  else if (event.key.toLowerCase() === "f") handleFlag(focused.row, focused.col);
-  else handled = false;
-
-  if (!handled) return;
-  event.preventDefault();
-  render();
-  boardEl
-    .querySelector(`[data-row="${focused.row}"][data-col="${focused.col}"]`)
-    ?.focus({ preventScroll: true });
+  const { rows, cols } = game.config; let handled = true;
+  if (event.key === "ArrowUp") focused.row = Math.max(0, focused.row - 1); else if (event.key === "ArrowDown") focused.row = Math.min(rows - 1, focused.row + 1); else if (event.key === "ArrowLeft") focused.col = Math.max(0, focused.col - 1); else if (event.key === "ArrowRight") focused.col = Math.min(cols - 1, focused.col + 1); else if (event.key === "Enter" || event.key === " ") handleOpen(focused.row, focused.col); else if (event.key.toLowerCase() === "h") handleMark(focused.row, focused.col, "hazard"); else handled = false;
+  if (!handled) return; event.preventDefault(); render(); boardEl.querySelector(`[data-row="${focused.row}"][data-col="${focused.col}"]`)?.focus({ preventScroll: true });
+});
+newGameEl.addEventListener("click", () => startNewGame({ advanceLevel: game.status === "won" && currentLevel < getMaxLevel() }));
+missionEl.addEventListener("click", (event) => { if (event.target.closest("#use-helper")) handleHint(); });
+quickHintEl.addEventListener("click", handleHint);
+document.querySelector(".board-mode-picker")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-board-mode]");
+  if (!button) return;
+  clearLogicalHint();
+  boardMode = button.dataset.boardMode;
+  updateBoardModeControls();
+  setMessage(boardMode === "open" ? "열기 모드 · 안전하다고 판단한 칸을 탭하세요." : `${game.config.hazard.emoji} 위험 표시 모드 · 의심되는 칸을 탭하세요. 다시 탭하면 표시가 지워져요.`);
 });
 
-difficultyButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    const nextDifficulty = button.dataset.difficulty;
-    currentLevel = readCurrentLevel(nextDifficulty);
-    startNewGame(nextDifficulty, { advanceLevel: false });
+function updateBoardModeControls() {
+  document.querySelectorAll("[data-board-mode]").forEach((button) => {
+    const active = button.dataset.boardMode === boardMode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
   });
-});
-
-newGameEl.addEventListener("click", () => {
-  startNewGame(currentDifficulty, {
-    advanceLevel: game.status === "won" && currentLevel < getMaxLevel(game.difficultyKey),
-  });
-});
-
-openModeEl.addEventListener("click", () => setInputMode("open"));
-flagModeEl.addEventListener("click", () => setInputMode("flag"));
-hintButtonEl.addEventListener("click", handleHint);
-
-const isIosDevice =
-  /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-const isStandalone =
-  window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
-
-if (isIosDevice && !isStandalone) {
-  installAppEl.classList.remove("hidden");
+  boardEl.dataset.mode = boardMode;
 }
 
-window.addEventListener("beforeinstallprompt", (event) => {
-  event.preventDefault();
-  deferredInstallPrompt = event;
-  if (!isStandalone) installAppEl.classList.remove("hidden");
-});
-
-installAppEl.addEventListener("click", async () => {
-  if (deferredInstallPrompt) {
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    installAppEl.classList.add("hidden");
-    return;
-  }
-
-  if (installDialogEl?.showModal) {
-    installDialogEl.showModal();
-    return;
-  }
-
-  setMessage("브라우저 메뉴에서 앱 설치 또는 홈 화면에 추가를 선택해 주세요.");
-});
-
-window.addEventListener("appinstalled", () => {
-  deferredInstallPrompt = null;
-  installAppEl.classList.add("hidden");
-  setMessage("Jian Finder가 앱으로 설치되었습니다.");
-});
-
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {
-      // 개발 중 파일 프로토콜 또는 제한된 브라우저에서는 등록이 실패할 수 있다.
-    });
-  });
-}
-
-function updateDifficultyOptions() {
-  for (const button of difficultyButtons) {
-    const key = button.dataset.difficulty;
-    const config = DIFFICULTIES[key];
-    const optionLevel = key === game.difficultyKey ? currentLevel : readCurrentLevel(key);
-    const effectiveConfig = getDifficultyConfig(key, optionLevel);
-    const isActive = key === game.difficultyKey;
-    button.classList.toggle("is-active", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
-    button.textContent = `${config.label} ${optionLevel}/${getMaxLevel(key)} · ${effectiveConfig.jianCount}명`;
-  }
-}
-updateDifficultyOptions();
+const isIosDevice = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+if (isIosDevice && !isStandalone) installAppEl.classList.remove("hidden");
+window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); deferredInstallPrompt = event; if (!isStandalone) installAppEl.classList.remove("hidden"); });
+installAppEl.addEventListener("click", async () => { if (deferredInstallPrompt) { deferredInstallPrompt.prompt(); await deferredInstallPrompt.userChoice; deferredInstallPrompt = null; installAppEl.classList.add("hidden"); } else if (installDialogEl?.showModal) installDialogEl.showModal(); else setMessage("브라우저 메뉴에서 앱 설치를 선택해 주세요."); });
+window.addEventListener("appinstalled", () => { deferredInstallPrompt = null; installAppEl.classList.add("hidden"); setMessage("Jian Rescue가 앱으로 설치되었어요."); });
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+updateBoardModeControls();
 render();

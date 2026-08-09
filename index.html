@@ -3,108 +3,106 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#ffe7ef" />
-    <meta name="description" content="숨어 있는 지안이를 숫자 단서로 모두 찾는 PWA 퍼즐 게임" />
+    <meta name="theme-color" content="#a9d9d0" />
+    <meta name="description" content="위험한 퍼즐 보드에서 지안이를 안전하게 구하는 가족용 퍼즐 게임" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Jian Finder" />
-    <meta property="og:description" content="숨어 있는 지안이를 숫자 단서로 모두 찾는 가족용 퍼즐 게임" />
+    <meta property="og:title" content="RESCUE! | JIAN RESCUE CLUB" />
+    <meta property="og:description" content="위험한 퍼즐 보드에서 지안이를 안전하게 구하는 가족용 퍼즐 게임" />
     <meta property="og:image" content="assets/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:locale" content="ko_KR" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Jian Finder" />
-    <meta name="twitter:description" content="숨어 있는 지안이를 숫자 단서로 모두 찾는 가족용 퍼즐 게임" />
+    <meta name="twitter:title" content="RESCUE! | JIAN RESCUE CLUB" />
+    <meta name="twitter:description" content="위험한 퍼즐 보드에서 지안이를 안전하게 구하는 가족용 퍼즐 게임" />
     <meta name="twitter:image" content="assets/og-image.png" />
-    <title>Jian Finder</title>
+    <title>RESCUE! | JIAN RESCUE CLUB</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.min.css" />
     <link rel="icon" href="favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" href="assets/favicon-32.png" sizes="32x32" />
     <link rel="icon" type="image/png" href="assets/favicon-16.png" sizes="16x16" />
     <link rel="icon" href="assets/icon-192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
-    <link rel="stylesheet" href="styles/app.css" />
+    <link rel="stylesheet" href="styles/app.css?v=21" />
   </head>
   <body>
-    <main class="app-shell">
+    <a class="skip-link" href="#game">게임으로 바로가기</a>
+    <main id="game" class="app-shell">
       <section class="hero" aria-labelledby="app-title">
         <div>
-          <p class="eyebrow">Jian Finder Zone</p>
-          <h1 id="app-title" class="wordmark" aria-label="Jian Finder">
-            <img class="wordmark-logo" src="assets/logo.svg" alt="" width="72" height="72" />
-            <span>Jian Finder</span>
+          <p class="eyebrow">JIAN RESCUE CLUB</p>
+          <h1 id="app-title" class="wordmark" aria-label="Jian Rescue">
+            <img class="wordmark-logo" src="assets/jian-rescue-mascot.png" alt="지안 구조대 캐릭터" width="72" height="72" />
+            <span>RESCUE! <i class="title-emoji" aria-hidden="true">🧩</i></span>
           </h1>
-          <p class="lede">숨어 있는 지안이를 숫자 단서로 모두 찾으세요.</p>
+          <p class="lede">단서를 따라 지안을 구하고, 위험요소를 안전하게 표시하세요.</p>
         </div>
         <div class="hero-actions">
           <button id="install-app" class="secondary-action hidden" type="button">앱 설치</button>
-          <button id="use-hint" class="secondary-action" type="button" disabled>돋보기 2회</button>
-          <button id="new-game" class="primary-action" type="button">새 판 시작</button>
+          <button id="new-game" class="primary-action" type="button">새 구조 작전</button>
         </div>
       </section>
 
       <section class="control-panel" aria-label="게임 설정과 상태">
-        <div class="stat">
+        <div class="stat stat-progress">
           <span>레벨</span>
           <strong id="level">1</strong>
         </div>
-        <div class="stat" aria-live="polite">
-          <span>이번 판 지안</span>
-          <strong id="remaining">0/10</strong>
+        <div class="stat stat-progress" aria-live="polite">
+          <span>구한 지안</span>
+          <strong id="jian-progress">0/10</strong>
+        </div>
+        <div class="stat stat-progress">
+          <span>표시한 위험</span>
+          <strong id="hazard-progress">0/4</strong>
         </div>
         <div class="stat">
-          <span>시간</span>
-          <strong><span id="timer">0</span>s</strong>
+          <span>남은 시간</span>
+          <strong id="timer">--:--</strong>
         </div>
-        <div class="stat">
-          <span>최고 기록</span>
-          <strong id="best-time">-</strong>
-        </div>
+        <div class="stat"><span>레벨 최단</span><strong id="best-time">기록 없음</strong></div>
       </section>
 
-      <section class="mode-panel" aria-label="칸을 누를 때의 행동 선택">
-        <div class="mode-copy">
-          <span>칸 동작</span>
-          <small>PC: 좌클릭 열기 · 우클릭 지안 표시</small>
+      <section id="mission" class="mission-card" aria-label="이번 구조 목표"></section>
+
+      <section class="mode-panel controls-hint" aria-label="칸 조작 방법">
+        <div class="control-copy">
+          <p class="control-pc"><b>PC</b> 좌클릭으로 열기 · 우클릭으로 위험 표시</p>
+          <p class="control-mobile"><b>모바일</b> 모드를 고르고 칸을 탭하세요 · 길게 누르기도 가능해요</p>
         </div>
-        <div class="segmented" role="group" aria-label="열기 또는 지안 표시 선택">
-          <button id="open-mode" class="mode-button is-active" type="button" aria-pressed="true">열기</button>
-          <button id="flag-mode" class="mode-button" type="button" aria-pressed="false">지안 표시</button>
+        <div class="segmented board-mode-picker" role="group" aria-label="탭 동작 선택">
+          <button class="mode-button is-active" type="button" data-board-mode="open" aria-pressed="true">열기</button>
+          <button class="mode-button" type="button" data-board-mode="hazard" aria-pressed="false">위험 표시</button>
         </div>
       </section>
 
       <section id="message" class="message" aria-live="polite">
-        지안이를 모두 찾으세요. 숫자는 주변 지안 수 · 💣 숫자는 주변 폭탄 수입니다.
+        오늘의 구조 환경을 확인하세요.
       </section>
 
       <section class="board-frame" aria-label="게임판 영역">
-        <div id="board" class="board" role="grid" aria-label="지안찾기 게임판"></div>
+        <div id="board" class="board" role="grid" aria-label="지안 구하기 게임판"></div>
+        <button id="quick-hint" class="quick-hint" type="button" disabled aria-label="논리 힌트 사용">
+          <span aria-hidden="true">💡</span><b>논리 힌트</b><small id="quick-hint-count">–</small>
+        </button>
       </section>
 
-      <details class="settings-panel">
-        <summary>난이도·게임 룰</summary>
-        <div class="field difficulty-field">
-          <span>난이도</span>
-          <div class="difficulty-buttons" role="group" aria-label="난이도 선택">
-            <button class="difficulty-button is-active" type="button" data-difficulty="beginner" aria-pressed="true">초급</button>
-            <button class="difficulty-button" type="button" data-difficulty="intermediate" aria-pressed="false">중급</button>
-            <button class="difficulty-button" type="button" data-difficulty="expert" aria-pressed="false">고급</button>
-          </div>
-        </div>
+      <details class="settings-panel" open>
+        <summary>게임 방법</summary>
         <section class="help">
-          <h2>게임 룰</h2>
           <ul>
-            <li>첫 행동은 반드시 <b>열기</b>입니다. 첫 칸과 주변 칸은 안전합니다.</li>
-            <li>큰 숫자는 주변 지안 수, 작은 💣 숫자는 주변 폭탄 수입니다.</li>
-            <li>지안 칸은 열거나 <b>지안 표시</b>로 찾을 수 있습니다. 표시는 다시 해제할 수 있습니다.</li>
-            <li>폭탄 칸을 열면 즉시 실패하고 게임이 끝납니다.</li>
-            <li>지안이가 아닌 칸에 표시하면 폭탄이 터져 실패합니다.</li>
-            <li>이번 판 지안이를 모두 정확히 표시해야 다음 레벨로 넘어갑니다.</li>
+            <li>큰 숫자는 주변 지안, 작은 아이콘 숫자는 주변 위험의 수예요.</li>
+            <li>지안을 모두 구하고 위험을 정확히 모두 표시하면 성공해요.</li>
+            <li>남은 시간이 0이 되면 실패해요. 레벨 최단은 같은 레벨을 가장 빨리 구조한 기록이에요.</li>
+            <li>논리 힌트는 단서 → 후보 → 결론의 3단계 설명이며, 칸을 대신 열지 않아요.</li>
           </ul>
-          <p>PC: 지안 칸은 우클릭으로 표시·해제하고, 일반 칸은 좌클릭으로 엽니다.</p>
-          <p>모바일: 위 버튼에서 <b>지안 표시</b>를 선택한 뒤 탭하세요. 단서는 <b>열기</b>로 전환합니다.</p>
+          <p class="control-pc"><b>PC</b> 좌클릭으로 열고, 우클릭으로 위험을 표시해요.</p>
+          <p class="control-mobile"><b>모바일</b> 열기·위험 표시 모드를 고른 뒤 칸을 탭해요. 길게 눌러 바로 표시할 수도 있어요.</p>
         </section>
       </details>
 
@@ -112,7 +110,7 @@
         <form method="dialog" class="install-guide">
           <button class="dialog-close" type="submit" aria-label="닫기">×</button>
           <p class="eyebrow">INSTALL PWA</p>
-          <h2 id="install-dialog-title">Jian Finder 설치 안내</h2>
+          <h2 id="install-dialog-title">Jian Rescue 설치 안내</h2>
           <p class="dialog-copy">설치하지 않아도 바로 플레이할 수 있습니다. 자주 쓴다면 아래 방법으로 홈 화면이나 앱 목록에 추가하세요.</p>
 
           <div class="install-platforms">
@@ -121,7 +119,7 @@
               <ol class="install-steps">
                 <li><span class="install-step-icon" aria-hidden="true">↥</span><div><b>Safari 공유 버튼</b><small>사각형과 위쪽 화살표 아이콘을 누릅니다.</small></div></li>
                 <li><span class="install-step-icon" aria-hidden="true">＋</span><div><b>홈 화면에 추가</b><small>공유 메뉴를 아래로 내려 항목을 선택합니다.</small></div></li>
-                <li><span class="install-step-icon" aria-hidden="true">✓</span><div><b>추가 후 실행</b><small>홈 화면의 Jian Finder 아이콘으로 실행합니다.</small></div></li>
+                <li><span class="install-step-icon" aria-hidden="true">✓</span><div><b>추가 후 실행</b><small>홈 화면의 Jian Rescue 아이콘으로 실행합니다.</small></div></li>
               </ol>
             </section>
 
@@ -150,6 +148,6 @@
       </dialog>
     </main>
 
-    <script type="module" src="src/app.js"></script>
+    <script type="module" src="src/app.js?v=21"></script>
   </body>
 </html>
