@@ -8,7 +8,7 @@
 - 배포일: 2026-08-09
 - 테스트 기간: 2026-08-09 ~ 2026-08-16
 - 테스트 목표: 새 성공 조건, 고정 튜토리얼, 단계형 논리 힌트, 위험별 규칙과 모바일 플레이 감각 확인
-- 공개 주소: https://ljwkck-ship-it.github.io/jian-finder/
+- 공개 주소: https://ljwkck-ship-it.github.io/jian-rescue/
 
 ## 오늘 반영한 내용
 
@@ -92,6 +92,6 @@ localhost 또는 HTTPS에서 Safari, Chrome, Edge로 바로 플레이하거나 �
 
 ## 운영 메모
 
-- 저장소·배포: https://github.com/ljwkck-ship-it/jian-finder / https://ljwkck-ship-it.github.io/jian-finder/
+- 저장소·배포: https://github.com/ljwkck-ship-it/jian-rescue / https://ljwkck-ship-it.github.io/jian-rescue/
 - 가족 얼굴 크롭본은 공개 테스트에 동의한 자산만 사용합니다. 공개 범위가 바뀌면 계속 공개할지 다시 검토합니다.
 - Pretendard와 Baloo 2는 CDN으로 불러옵니다. 오프라인 환경에서 글꼴까지 보장하려면 향후 자체 호스팅 전략을 검토합니다.
