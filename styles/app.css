@@ -287,6 +287,21 @@ h1 {
   font-weight: 850;
 }
 .level-route-button.is-current { color: white; border-color: var(--accent); background: var(--accent); }
+.level-return-button {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid #6fae9f;
+  border-radius: 11px;
+  color: #285d55;
+  background: #e7f3ed;
+  font-size: .8rem;
+  font-weight: 900;
+  text-align: left;
+}
+.level-return-button span { margin-right: 4px; color: #3d8e7b; font-size: 1rem; }
+.level-return-button:focus-visible,
+.level-route-button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
 .field,
 .stat {

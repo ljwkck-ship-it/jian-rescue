@@ -9,7 +9,7 @@ import {
   toggleFlag,
   toggleHazardMark,
   useHint,
-} from "./game.js?v=23";
+} from "./game.js?v=24";
 
 const STORAGE_KEY = "jian-rescue-best-times-v3";
 const LEVEL_KEY = "jian-rescue-current-level-v3";
@@ -308,8 +308,11 @@ function renderLevelRoute() {
     const selected = level === currentLevel;
     return `<button type="button" class="level-route-button${selected ? " is-current" : ""}" data-level="${level}" aria-pressed="${selected}">Lv.${level}${formatBestTime(level) === "기록 없음" ? "" : " ✓"}</button>`;
   }).join("");
+  const returnToLatest = currentLevel < highestUnlocked
+    ? `<button type="button" class="level-return-button" data-level="${highestUnlocked}"><span>↪</span> 최신 진행 레벨 ${highestUnlocked}로 돌아가기</button>`
+    : "";
   const content = levelRouteEl.querySelector(".level-route-content");
-  if (content) content.innerHTML = `<small>완료한 레벨을 골라 최단 기록에 다시 도전할 수 있어요.</small><div class="level-route-list">${buttons}</div>`;
+  if (content) content.innerHTML = `${returnToLatest}<small>완료한 레벨을 골라 최단 기록에 다시 도전할 수 있어요.</small><div class="level-route-list">${buttons}</div>`;
 }
 
 function getHazardStory(hazard) {
@@ -453,9 +456,10 @@ newGameEl.addEventListener("click", () => startNewGame({ advanceLevel: game.stat
 levelRouteEl?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-level]");
   if (!button) return;
+  const returningToLatest = button.classList.contains("level-return-button");
   currentLevel = clampLevel(Number(button.dataset.level));
   startNewGame();
-  setMessage(`레벨 ${currentLevel} 재도전 · 이 레벨의 최단 기록을 갱신해 보세요.`);
+  setMessage(returningToLatest ? `최신 진행 레벨 ${currentLevel}로 돌아왔어요. 구조 작전을 이어가세요.` : `레벨 ${currentLevel} 재도전 · 이 레벨의 최단 기록을 갱신해 보세요.`);
 });
 missionEl.addEventListener("click", (event) => {
   if (event.target.closest("#use-helper")) handleHint();
