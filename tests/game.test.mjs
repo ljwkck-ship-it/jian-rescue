@@ -78,7 +78,7 @@ test("레벨이 오르면 보드와 구조·위험 목표가 함께 증가한다
   assert.ok(late.hazardCount > early.hazardCount);
   assert.ok(late.timeLimitSeconds > early.timeLimitSeconds);
   assert.equal(late.timeLimitSeconds, getTimeLimitForLevel(99));
-  assert.equal(late.hintCount, 1);
+  assert.equal(late.hintCount, 3);
 });
 
 test("제한 시간이 끝나면 판이 실패하고 위치를 공개한다", () => {
@@ -120,6 +120,21 @@ test("논리 힌트는 칸을 열지 않고 3단계 설명만 제공한다", () 
   assert.equal(game.hintsUsed, 1);
   assert.equal(game.board.flat().filter((cell) => cell.isOpen).length, openBefore);
   assert.ok(getLogicalHint(game));
+});
+
+test("논리 힌트는 세 번까지 쓰고 누적 시간 페널티가 커진다", () => {
+  const game = createGame(1);
+  openCell(game, 1, 1, seededRandom(1));
+  const first = useHint(game);
+  useHint(game); useHint(game);
+  const second = useHint(game);
+  useHint(game); useHint(game);
+  const third = useHint(game);
+  assert.equal(first.penalty, 5);
+  assert.equal(second.penalty, 10);
+  assert.equal(third.penalty, 20);
+  assert.equal(game.hintsUsed, 3);
+  assert.equal(game.hintPenaltySeconds, 35);
 });
 
 test("생성된 보드는 지안·위험 단서만으로 추측 없이 풀 수 있다", () => {

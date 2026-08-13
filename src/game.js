@@ -6,11 +6,11 @@ const DOMAIN_HAZARD = 4;
 const DOMAIN_UNKNOWN = DOMAIN_SAFE | DOMAIN_JIAN | DOMAIN_HAZARD;
 
 export const HAZARDS = [
-  { key: "puddle", label: "웅덩이", emoji: "💧", fromLevel: 1, rule: "주변 8칸" },
-  { key: "wind", label: "세찬 바람", emoji: "💨", fromLevel: 4, rule: "같은 가로·세로줄 전체" },
-  { key: "poop", label: "강아지 똥", emoji: "💩", fromLevel: 7, rule: "주변 8칸과 같은 가로줄" },
-  { key: "spider", label: "거미", emoji: "🕷️", fromLevel: 10, rule: "대각선 줄 전체" },
-  { key: "snake", label: "뱀", emoji: "🐍", fromLevel: 13, rule: "바로 위·아래·왼쪽·오른쪽" },
+  { key: "puddle", label: "웅덩이", emoji: "💧", fromLevel: 1, rule: "주변 8칸", description: "이 칸을 둘러싼 8칸 안의 웅덩이 수예요.", example: "💧 2라면 바로 주변 8칸 중 웅덩이가 2곳이에요." },
+  { key: "wind", label: "세찬 바람", emoji: "💨", fromLevel: 4, rule: "같은 행 + 같은 열 전체", description: "이 칸은 빼고, 같은 가로줄 전체와 세로줄 전체를 합쳐 세요. 십자(＋) 모양 범위예요.", example: "💨 2라면 같은 행·열의 모든 칸 중 바람 칸이 2곳이에요." },
+  { key: "poop", label: "강아지 똥", emoji: "💩", fromLevel: 7, rule: "주변 8칸 + 같은 행 전체", description: "주변 8칸에 같은 가로줄의 먼 칸까지 더해 세요. 겹치는 칸은 한 번만 세요.", example: "💩 3이라면 그 넓은 가로 범위 안에 3곳이 있어요." },
+  { key: "spider", label: "거미", emoji: "🕷️", fromLevel: 10, rule: "대각선 4방향 전체", description: "이 칸에서 X자 방향으로 끝까지 이어지는 모든 칸을 세요.", example: "🕷️ 1이라면 두 대각선 줄 전체에 거미가 1곳이에요." },
+  { key: "snake", label: "뱀", emoji: "🐍", fromLevel: 13, rule: "상·하·좌·우 4칸", description: "대각선은 빼고 바로 맞닿은 네 방향만 세요.", example: "🐍 1이라면 위·아래·왼쪽·오른쪽 중 1곳이에요." },
 ];
 
 const TUTORIAL_START = [1, 1];
@@ -36,7 +36,9 @@ export function createGame(level = 1) {
     startedAt: null,
     elapsedSeconds: 0,
     remainingSeconds: config.timeLimitSeconds,
+    timeWarnings: new Set(),
     hintsUsed: 0,
+    hintPenaltySeconds: 0,
     hintedCells: new Set(),
     combo: 0,
     bestCombo: 0,
@@ -68,7 +70,7 @@ export function getLevelConfig(level = 1) {
     jianCount,
     bombCount: hazardCount,
     hazardCount,
-    hintCount: safeLevel < 10 ? 2 : 1,
+    hintCount: 3,
     timeLimitSeconds: getTimeLimitForLevel(safeLevel),
     hazard: getHazardForLevel(safeLevel),
     tutorial: false,
@@ -470,6 +472,8 @@ export function useHint(game) {
     if (!logicalHint) return null;
     game.activeHint = { ...logicalHint, stage: 1 };
     game.hintsUsed += 1;
+    const penalty = [5, 10, 20][game.hintsUsed - 1] ?? 20;
+    game.hintPenaltySeconds += penalty;
     consumed = true;
   } else {
     game.activeHint.stage += 1;
@@ -478,7 +482,7 @@ export function useHint(game) {
   const hint = game.activeHint;
   if (hint.source) game.board[hint.source.row][hint.source.col].isHintSource = true;
   if (hint.stage >= 2) game.board[hint.target.row][hint.target.col].isHintTarget = true;
-  return { ...hint, consumed };
+  return { ...hint, consumed, penalty: consumed ? [5, 10, 20][game.hintsUsed - 1] ?? 20 : 0 };
 }
 
 export function openSafeArea(game, startRow, startCol) {

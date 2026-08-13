@@ -28,7 +28,7 @@
     <link rel="icon" type="image/png" href="assets/favicon-16.png" sizes="16x16" />
     <link rel="icon" href="assets/icon-192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
-    <link rel="stylesheet" href="styles/app.css?v=21" />
+    <link rel="stylesheet" href="styles/app.css?v=22" />
   </head>
   <body>
     <a class="skip-link" href="#game">게임으로 바로가기</a>
@@ -68,6 +68,8 @@
         <div class="stat"><span>레벨 최단</span><strong id="best-time">기록 없음</strong></div>
       </section>
 
+      <section id="level-route" class="level-route" aria-label="완료한 레벨 다시 도전" hidden></section>
+
       <section id="mission" class="mission-card" aria-label="이번 구조 목표"></section>
 
       <section class="mode-panel controls-hint" aria-label="칸 조작 방법">
@@ -96,10 +98,10 @@
         <summary>게임 방법</summary>
         <section class="help">
           <ul>
-            <li>큰 숫자는 주변 지안, 작은 아이콘 숫자는 주변 위험의 수예요.</li>
+            <li>큰 숫자는 주변 지안, 작은 아이콘 숫자는 해당 위험의 범위 안에 있는 위험 수예요. 위험마다 범위가 다르니 ‘단서 읽는 법’을 확인하세요.</li>
             <li>지안을 모두 구하고 위험을 정확히 모두 표시하면 성공해요.</li>
             <li>남은 시간이 0이 되면 실패해요. 레벨 최단은 같은 레벨을 가장 빨리 구조한 기록이에요.</li>
-            <li>논리 힌트는 단서 → 후보 → 결론의 3단계 설명이며, 칸을 대신 열지 않아요.</li>
+            <li>논리 힌트는 3번 사용할 수 있고, 한 번을 시작할 때마다 시간 5초 → 10초 → 20초가 줄어요. 각 힌트는 단서 → 후보 → 결론의 3단계 설명이며, 칸을 대신 열지 않아요.</li>
           </ul>
           <p class="control-pc"><b>PC</b> 좌클릭으로 열고, 우클릭으로 위험을 표시해요.</p>
           <p class="control-mobile"><b>모바일</b> 열기·위험 표시 모드를 고른 뒤 칸을 탭해요. 길게 눌러 바로 표시할 수도 있어요.</p>
@@ -148,6 +150,6 @@
       </dialog>
     </main>
 
-    <script type="module" src="src/app.js?v=21"></script>
+    <script type="module" src="src/app.js?v=22"></script>
   </body>
 </html>
