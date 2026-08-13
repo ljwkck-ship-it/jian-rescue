@@ -58,6 +58,7 @@ export function createGame(level = 1) {
     combo: 0,
     bestCombo: 0,
     score: 0,
+    scoreBreakdown: { explore: 0, rescue: 0, mark: 0, time: 0, combo: 0 },
   };
 }
 
@@ -439,6 +440,7 @@ export function openCell(game, row, col, random = Math.random) {
     game.status = "lost";
     game.lossReason = "hazard";
     game.lossHazardKey = cell.hazardKey;
+    game.lossCell = { row, col };
     game.combo = 0;
     revealAfterLoss(game);
     return game.status;
@@ -458,7 +460,7 @@ export function openCell(game, row, col, random = Math.random) {
     }
   }
   const openedNow = game.openedSafeCount - openedBefore;
-  if (openedNow > 0) addComboScore(game, openedNow * 10);
+  if (openedNow > 0) addComboScore(game, openedNow * 10, "explore");
   if (hasCompletedMission(game)) finishWithWin(game);
   return game.status;
 }
@@ -489,7 +491,7 @@ export function toggleFlag(game, row, col) {
   cell.isFlagged = !cell.isFlagged;
   cell.isFound = cell.isFlagged;
   game.flags += cell.isFlagged ? 1 : -1;
-  if (cell.isFlagged) addComboScore(game, 150);
+  if (cell.isFlagged) addComboScore(game, 150, "rescue");
   else game.combo = 0;
   if (hasCompletedMission(game)) finishWithWin(game);
   return game.status;
@@ -517,7 +519,7 @@ export function toggleHazardMark(game, row, col, hazardKey = game.config.hazard.
     game.hazardMarkCounts[hazardKey] = (game.hazardMarkCounts[hazardKey] ?? 0) + 1;
     if (!cell.hasScoredMark) {
       cell.hasScoredMark = true;
-      addComboScore(game, 15);
+      addComboScore(game, 15, "mark");
     }
   }
   if (hasCompletedMission(game)) finishWithWin(game);
@@ -683,7 +685,11 @@ function canReceiveInput(game) {
 
 function finishWithWin(game) {
   game.status = "won";
-  game.score += game.remainingSeconds * 5 + game.bestCombo * 20;
+  const timeBonus = game.remainingSeconds * 5;
+  const comboBonus = game.bestCombo * 20;
+  game.scoreBreakdown.time += timeBonus;
+  game.scoreBreakdown.combo += comboBonus;
+  game.score += timeBonus + comboBonus;
   revealJiansAfterWin(game);
 }
 
@@ -693,13 +699,17 @@ function findJian(game, cell) {
   cell.isOpen = true;
   cell.isFlagged = true;
   game.flags += 1;
-  addComboScore(game, 150);
+  addComboScore(game, 150, "rescue");
 }
 
-function addComboScore(game, base) {
+function addComboScore(game, base, category) {
   game.combo += 1;
   game.bestCombo = Math.max(game.bestCombo, game.combo);
-  game.score += base + Math.min(game.combo - 1, 10) * 5;
+  const baseScore = base;
+  const comboScore = Math.min(game.combo - 1, 10) * 5;
+  game.scoreBreakdown[category] += baseScore;
+  game.scoreBreakdown.combo += comboScore;
+  game.score += baseScore + comboScore;
 }
 
 function keyOf(row, col) {

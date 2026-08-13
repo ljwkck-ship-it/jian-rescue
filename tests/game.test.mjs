@@ -234,6 +234,7 @@ test("안전 행동과 구조는 점수와 콤보를 올리고 힌트는 콤보�
   openCell(game, 1, 1, seededRandom(1));
   assert.ok(game.score > 0);
   assert.ok(game.combo > 0);
+  assert.equal(Object.values(game.scoreBreakdown).reduce((sum, score) => sum + score, 0), game.score);
   useHint(game);
   assert.equal(game.combo, 0);
 });

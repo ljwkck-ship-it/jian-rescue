@@ -9,7 +9,7 @@ import {
   toggleFlag,
   toggleHazardMark,
   useHint,
-} from "./game.js?v=25";
+} from "./game.js?v=26";
 
 const STORAGE_KEY = "jian-rescue-best-times-v3";
 const LEVEL_KEY = "jian-rescue-current-level-v3";
@@ -39,6 +39,7 @@ const levelRouteEl = document.querySelector("#level-route");
 const scoreEl = document.querySelector("#score");
 const comboEl = document.querySelector("#combo");
 const levelStarsEl = document.querySelector("#level-stars");
+const rewardStripEl = document.querySelector(".reward-strip");
 
 let currentLevel = readCurrentLevel();
 let highestUnlocked = readHighestUnlocked(currentLevel);
@@ -131,10 +132,13 @@ function handleOpen(row, col) {
   const wasReady = game.status === "ready";
   const foundBefore = getFoundJianMarks(game);
   const comboBefore = game.combo;
+  const scoreBefore = game.score;
   openCell(game, row, col);
   const foundAfter = getFoundJianMarks(game);
-  if (foundAfter > foundBefore) showJianRescuedEffect(foundAfter, game.config.jianCount);
-  else if (game.combo > comboBefore && game.combo >= 3) showComboEffect();
+  if (foundAfter > foundBefore) {
+    showJianRescuedEffect(foundAfter, game.config.jianCount);
+    showComboEffect("지안 구조", game.score - scoreBefore, 3);
+  } else if (game.combo > comboBefore) showComboEffect("안전 열기", game.score - scoreBefore, 1);
   if (wasReady && game.status === "playing") {
     startTimerIfNeeded();
     setMessage(game.config.tutorial ? "튜토리얼 2/3 · 빛나는 지안 칸을 열어 구조하세요." : `찍지 않아도 풀 수 있는 판이에요. ${getHazardStory(game.config.hazard)}`);
@@ -154,15 +158,16 @@ function handleMark(row, col, hazardKey) {
   const wasReady = game.status === "ready";
   const before = game.hazardMarks;
   const comboBefore = game.combo;
+  const scoreBefore = game.score;
   toggleHazardMark(game, row, col, hazardKey);
   const after = game.hazardMarks;
   if (wasReady) setMessage("첫 행동은 열기예요. 첫 안전 칸을 열고 단서를 확인하세요.");
   else if (game.status === "playing" && after > before) {
     const hazard = game.config.hazards.find((item) => item.key === hazardKey) ?? game.config.hazard;
     setMessage(game.config.tutorial ? `튜토리얼 3/3 · ${hazard.label}로 의심되는 칸을 표시했어요. 표시는 언제든 다시 눌러 지울 수 있어요.` : `${hazard.emoji} ${hazard.label} 후보를 표시했어요. 단서가 맞지 않으면 다시 눌러 지우세요.`);
-    if (game.combo > comboBefore && game.combo >= 3) showComboEffect();
+    if (game.combo > comboBefore) showComboEffect("위험 후보 표시", game.score - scoreBefore, 2);
   } else if (game.status === "playing" && after < before) {
-    setMessage("표시를 지웠어요. 단서를 다시 확인해 보세요.");
+    setMessage("표시를 지웠어요. 구조 콤보가 초기화됐습니다. 단서를 다시 확인해 보세요.");
   } else if (game.status === "playing" && before === after) {
     const hazard = game.config.hazards.find((item) => item.key === hazardKey) ?? game.config.hazard;
     setMessage(`${hazard.emoji} ${hazard.label} 표시는 ${game.config.hazardCounts[hazard.key]}곳까지예요. 기존 표시를 지우거나 다른 위험을 선택하세요.`);
@@ -177,7 +182,7 @@ function handleHint() {
   const hint = useHint(game);
   if (!hint) return setMessage("현재 열린 단서에서 제안할 논리 힌트가 없어요. 표시를 다시 확인하거나 칸을 더 열어 보세요.");
   if (hint.consumed && !game.config.tutorialNoTimer) updateClock();
-  if (hint.stage === 1) setMessage(`논리 힌트 1/3 · ${hint.sourcePosition}의 단서를 먼저 살펴보세요. 힌트 ${game.hintsUsed}/3회를 사용했고 시간 ${hint.penalty}초가 줄었어요.`);
+  if (hint.stage === 1) setMessage(`논리 힌트 1/3 · ${hint.sourcePosition}의 단서를 먼저 살펴보세요. 힌트 ${game.hintsUsed}/3회를 사용했어요.${game.config.tutorialNoTimer ? " 연습 레벨에서는 시간이 줄지 않아요." : ` 시간 ${hint.penalty}초가 줄었어요.`}`);
   else if (hint.stage === 2) setMessage(`논리 힌트 2/3 · ${hint.sourcePosition}의 숫자와 ${hint.targetPosition}을 포함한 남은 후보 칸 수를 비교해 보세요.`);
   else setMessage(`논리 힌트 3/3 · ${hint.explanation} 이제 직접 실행해 보세요: ${hint.action}`);
   scheduleIdleHint();
@@ -221,7 +226,8 @@ function handleTerminalState() {
     clearIdleHint();
     newGameEl.textContent = "같은 작전 재도전";
     const openedHazard = game.config.hazards.find((hazard) => hazard.key === game.lossHazardKey) ?? game.config.hazard;
-    setMessage(game.lossReason === "timeout" ? `시간 종료 · 제한 시간 ${formatDuration(game.config.timeLimitSeconds)} 안에 구조하지 못했어요. 같은 레벨에서 다시 시도해 보세요.` : `작전 실패. ${openedHazard.emoji} ${openedHazard.label}을 열었어요. 공개된 위치와 해당 아이콘 단서를 다시 확인해 보세요.`);
+    const clueAdvice = game.lossReason === "hazard" ? getFailureClueAdvice(game.lossHazardKey) : "";
+    setMessage(game.lossReason === "timeout" ? `시간 종료 · 제한 시간 ${formatDuration(game.config.timeLimitSeconds)} 안에 구조하지 못했어요. 같은 레벨에서 다시 시도해 보세요.` : `작전 실패. ${openedHazard.emoji} ${openedHazard.label}을 열었어요.${clueAdvice}`);
   }
 }
 
@@ -230,7 +236,8 @@ function showSuccessEffect(isFinalLevel, stars) {
   const effect = document.createElement("div");
   effect.className = "success-burst";
   effect.setAttribute("role", "status");
-  effect.innerHTML = `<div class="success-burst-card"><span class="success-crown">${isFinalLevel ? "👑" : "🎉"}</span><strong>${isFinalLevel ? "모든 구조 작전 완료!" : "지안 구조 성공!"}</strong><span class="success-stars" aria-label="별 ${stars}개">${starsToText(stars)}</span><small>${game.score.toLocaleString("ko-KR")}점 · 최고 콤보 ×${game.bestCombo}</small></div><i></i><i></i><i></i><i></i><i></i><i></i>`;
+  const parts = game.scoreBreakdown;
+  effect.innerHTML = `<div class="success-burst-card"><span class="success-crown">${isFinalLevel ? "👑" : "🎉"}</span><strong>${isFinalLevel ? "모든 구조 작전 완료!" : "지안 구조 성공!"}</strong><span class="success-stars" aria-label="별 ${stars}개">${starsToText(stars)}</span><small>${game.score.toLocaleString("ko-KR")}점 · 최고 콤보 ×${game.bestCombo}</small><p class="score-breakdown">안전 탐색 ${parts.explore} + 구조 ${parts.rescue} + 위험 표시 ${parts.mark} + 시간·콤보 ${parts.time + parts.combo}</p></div><i></i><i></i><i></i><i></i><i></i><i></i>`;
   document.body.appendChild(effect);
   window.setTimeout(() => effect.remove(), 2800);
 }
@@ -245,14 +252,14 @@ function showJianRescuedEffect(found, total) {
   window.setTimeout(() => pop.remove(), 1500);
 }
 
-function showComboEffect() {
+function showComboEffect(action, gainedScore, weight) {
   document.querySelector(".combo-pop")?.remove();
   const pop = document.createElement("div");
   pop.className = "combo-pop";
   pop.setAttribute("role", "status");
-  pop.textContent = `⚡ 구조 콤보 ×${game.combo} · ${game.score.toLocaleString("ko-KR")}점`;
+  pop.innerHTML = `<b>${action} +${weight}</b><span>콤보 ×${game.combo} · +${Math.max(0, gainedScore)}점</span>${game.combo === 1 ? "<small>힌트 사용이나 표시 취소 시 콤보가 초기화돼요.</small>" : ""}`;
   document.body.appendChild(pop);
-  window.setTimeout(() => pop.remove(), 850);
+  window.setTimeout(() => pop.remove(), game.combo === 1 ? 1700 : 950);
 }
 
 function render() {
@@ -274,6 +281,9 @@ function render() {
   const savedStars = readStars()[bestTimeKey(currentLevel)] ?? 0;
   levelStarsEl.textContent = starsToText(savedStars);
   levelStarsEl.setAttribute("aria-label", `별 ${savedStars}개 획득`);
+  rewardStripEl.hidden = game.config.tutorial && !game.completionHandled;
+  document.body.classList.toggle("tutorial-before-first", game.config.tutorial && !game.firstClickDone);
+  document.body.classList.toggle("tutorial-in-progress", game.config.tutorial && game.firstClickDone && game.status === "playing");
   updateBoardModeControls();
   renderLevelRoute();
   renderMission();
@@ -389,6 +399,25 @@ function getHazardStory(hazard) {
     snake: "풀숲에서 뱀이 움직이고 있어요. 조심해서 지안에게 다가가요.",
   };
   return stories[hazard.key] ?? `${hazard.label}을 피해 지안을 찾아요.`;
+}
+
+function getFailureClueAdvice(hazardKey) {
+  const hazard = game.config.hazards.find((item) => item.key === hazardKey);
+  const lossCell = game.lossCell;
+  if (!hazard || !lossCell) return " 공개된 위치와 같은 아이콘 단서를 다시 확인해 보세요.";
+  const candidates = game.board.flat().filter((cell) => {
+    if (!cell.isOpen || cell.hasJian || cell.hasBomb) return false;
+    return hazardNeighbors(game.config.rows, game.config.cols, cell.row, cell.col, hazard.key)
+      .some(([row, col]) => row === lossCell.row && col === lossCell.col);
+  });
+  const source = candidates.sort((a, b) => {
+    const countA = a.adjacentHazardCounts[hazard.key] ?? 0;
+    const countB = b.adjacentHazardCounts[hazard.key] ?? 0;
+    return countA - countB || Math.abs(a.row - lossCell.row) + Math.abs(a.col - lossCell.col) - Math.abs(b.row - lossCell.row) - Math.abs(b.col - lossCell.col);
+  })[0];
+  if (!source) return ` ${hazard.emoji} 숫자가 세는 ${hazard.rule} 범위를 다시 확인해 보세요.`;
+  const clue = source.adjacentHazardCounts[hazard.key] ?? 0;
+  return ` ${source.row + 1}행 ${source.col + 1}열의 ${hazard.emoji}${clue} 단서가 이 칸을 포함합니다. ${hazard.rule} 범위를 다시 살펴보세요.`;
 }
 
 function renderCell(cell) {
