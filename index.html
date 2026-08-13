@@ -28,7 +28,7 @@
     <link rel="icon" type="image/png" href="assets/favicon-16.png" sizes="16x16" />
     <link rel="icon" href="assets/icon-192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="assets/icon-192.png" />
-    <link rel="stylesheet" href="styles/app.css?v=22" />
+    <link rel="stylesheet" href="styles/app.css?v=23" />
   </head>
   <body>
     <a class="skip-link" href="#game">게임으로 바로가기</a>
@@ -68,8 +68,6 @@
         <div class="stat"><span>레벨 최단</span><strong id="best-time">기록 없음</strong></div>
       </section>
 
-      <section id="level-route" class="level-route" aria-label="완료한 레벨 다시 도전" hidden></section>
-
       <section id="mission" class="mission-card" aria-label="이번 구조 목표"></section>
 
       <section class="mode-panel controls-hint" aria-label="칸 조작 방법">
@@ -106,6 +104,10 @@
           <p class="control-pc"><b>PC</b> 좌클릭으로 열고, 우클릭으로 위험을 표시해요.</p>
           <p class="control-mobile"><b>모바일</b> 열기·위험 표시 모드를 고른 뒤 칸을 탭해요. 길게 눌러 바로 표시할 수도 있어요.</p>
         </section>
+        <details id="level-route" class="level-route" aria-label="완료한 레벨 다시 도전" hidden>
+          <summary>완료한 레벨 다시 하기</summary>
+          <div class="level-route-content"></div>
+        </details>
       </details>
 
       <dialog id="install-dialog" aria-labelledby="install-dialog-title">
@@ -150,6 +152,6 @@
       </dialog>
     </main>
 
-    <script type="module" src="src/app.js?v=22"></script>
+    <script type="module" src="src/app.js?v=23"></script>
   </body>
 </html>

@@ -9,7 +9,7 @@ import {
   toggleFlag,
   toggleHazardMark,
   useHint,
-} from "./game.js?v=22";
+} from "./game.js?v=23";
 
 const STORAGE_KEY = "jian-rescue-best-times-v3";
 const LEVEL_KEY = "jian-rescue-current-level-v3";
@@ -308,7 +308,8 @@ function renderLevelRoute() {
     const selected = level === currentLevel;
     return `<button type="button" class="level-route-button${selected ? " is-current" : ""}" data-level="${level}" aria-pressed="${selected}">Lv.${level}${formatBestTime(level) === "기록 없음" ? "" : " ✓"}</button>`;
   }).join("");
-  levelRouteEl.innerHTML = `<div><b>완료한 작전 다시 도전</b><small>최단 기록을 갱신해 보세요.</small></div><div class="level-route-list">${buttons}</div>`;
+  const content = levelRouteEl.querySelector(".level-route-content");
+  if (content) content.innerHTML = `<small>완료한 레벨을 골라 최단 기록에 다시 도전할 수 있어요.</small><div class="level-route-list">${buttons}</div>`;
 }
 
 function getHazardStory(hazard) {
@@ -365,9 +366,9 @@ function describeCell(cell) {
   const position = `${cell.row + 1}행 ${cell.col + 1}열`;
   if (cell.isWrongFlag) return `${position}, 잘못된 표시`;
   if (cell.isFlagged && !cell.isOpen) return `${position}, 지안 표시됨`;
-  if (cell.isHazardMarked && !cell.isOpen) return `${position}, 위험 표시됨`;
+  if (cell.isHazardMarked && !cell.isOpen) return `${position}, ${game.config.hazard.label} 후보로 표시됨`;
   if (!cell.isOpen) return `${position}, 닫힘`;
-  if (cell.hasBomb) return `${position}, ${game.config.hazard.label}`;
+  if (cell.hasBomb) return `${position}, 실제 ${game.config.hazard.label}`;
   if (cell.hasJian) return `${position}, 지안`;
   return `${position}, 주변 지안 ${cell.adjacentCount}명, 주변 ${game.config.hazard.label} ${cell.adjacentBombCount}곳`;
 }

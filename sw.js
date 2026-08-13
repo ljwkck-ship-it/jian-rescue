@@ -1,11 +1,11 @@
-const CACHE_VERSION = "jian-rescue-v22";
+const CACHE_VERSION = "jian-rescue-v23";
 const APP_SHELL = [
   "./",
   "index.html",
   "favicon.ico",
-  "styles/app.css?v=22",
-  "src/app.js?v=22",
-  "src/game.js?v=22",
+  "styles/app.css?v=23",
+  "src/app.js?v=23",
+  "src/game.js?v=23",
   "manifest.webmanifest",
   "assets/logo.svg",
   "assets/jian-rescue-mascot.png",

@@ -255,21 +255,26 @@ h1 {
 }
 
 .level-route {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
   margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid rgb(127 73 94 / 18%);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  padding-top: 8px;
+  border-top: 1px dashed var(--safe-border);
 }
 
-.level-route > div:first-child { display: grid; gap: 2px; }
-.level-route b { color: var(--accent-strong); font-size: .86rem; }
-.level-route small { color: var(--muted); font-size: .72rem; }
-.level-route-list { display: flex; gap: 6px; overflow-x: auto; padding: 2px; }
+.level-route summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: .8rem;
+  font-weight: 800;
+  list-style: none;
+}
+.level-route summary::after { content: "▾"; margin-left: auto; color: var(--muted); }
+.level-route[open] summary::after { content: "▴"; }
+.level-route-content { display: grid; gap: 8px; padding: 2px 0 4px; }
+.level-route small { color: var(--muted); font-size: .75rem; line-height: 1.45; }
+.level-route-list { display: flex; gap: 6px; overflow-x: auto; padding: 2px 1px 5px; }
 .level-route-button {
   flex: 0 0 auto;
   min-height: 34px;
@@ -526,18 +531,12 @@ select {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 30%);
 }
 
-.cell.is-hazard-marked::before {
-  content: var(--hazard-mark, "!");
-  display: grid;
-  place-items: center;
-  width: 76%;
-  height: 76%;
-  border-radius: 50% 50% 50% 14%;
+.cell.is-hazard-marked {
+  border: 2px dashed #795773;
   background: #f5e5f2;
-  box-shadow: 0 3px 0 #795773, inset 0 1px 0 white;
-  font-size: calc(var(--cell) * .52);
-  line-height: 1;
+  box-shadow: inset 0 0 0 3px rgb(121 87 115 / 10%);
 }
+.hazard-mark-icon { font-size: calc(var(--cell) * .52); line-height: 1; filter: saturate(.85); }
 
 .cell.is-jian {
   overflow: hidden;
@@ -1144,12 +1143,28 @@ h1 { font-family: "Baloo 2", "Arial Rounded MT Bold", "Pretendard", sans-serif; 
 .cell { border-width: 2px; border-radius: 10px; background: linear-gradient(145deg, #d5f0e6, var(--closed)); box-shadow: inset 0 2px 0 rgb(255 255 255 / 58%); }
 .cell.is-open { background: #f8f6eb; }
 .cell.is-flagged::before { content: "J"; background: #ef7463; box-shadow: 0 3px 0 #b94a42; }
-.cell.is-hazard-marked::before { content: var(--hazard-mark, "!"); display: grid; place-items: center; width: 76%; height: 76%; border-radius: 50% 50% 50% 14%; background: #f5e5f2; box-shadow: 0 3px 0 #563d53, inset 0 1px 0 #fff; font-size: calc(var(--cell) * .52); font-weight: 950; }
+.cell.is-hazard-marked { border-style: dashed; border-color: #795773; background: #f5e5f2; box-shadow: inset 0 0 0 3px rgb(121 87 115 / 10%); }
 .cell.is-jian { border-color: #ef7463; background: #fff3d6; }
-.cell.is-hazard { border-color: #795773; background: #f0def0; font-size: calc(var(--cell) * .67); }
+.cell.is-hazard { border: 3px solid #563d53; background: #d9bdd8; box-shadow: inset 0 2px 0 rgb(255 255 255 / 42%); font-size: calc(var(--cell) * .67); }
 .cell:has(.clue-hazard) { align-content: center; gap: 2px; }
 .clue-hazard { color: #795773; font-size: calc(var(--cell) * .2); font-weight: 850; line-height: .9; white-space: nowrap; }
 .settings-panel { margin-top: 0; border-radius: 18px; }
+.settings-panel .level-route { padding-top: 8px; }
+.settings-panel .level-route > summary {
+  min-height: 40px;
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 800;
+}
+.settings-panel .level-route > summary::after {
+  content: "▾";
+  width: auto;
+  height: auto;
+  margin-left: auto;
+  color: var(--muted);
+  background: transparent;
+}
+.settings-panel .level-route[open] > summary::after { content: "▴"; }
 
 @media (max-width: 720px) {
   .app-shell { gap: 7px; }
