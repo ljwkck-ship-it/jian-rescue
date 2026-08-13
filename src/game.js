@@ -1,9 +1,7 @@
-export const MAX_LEVEL = 99;
+export const MAX_LEVEL = 50;
 const MAX_GENERATION_ATTEMPTS = 600;
 const DOMAIN_SAFE = 1;
 const DOMAIN_JIAN = 2;
-const DOMAIN_HAZARD = 4;
-const DOMAIN_UNKNOWN = DOMAIN_SAFE | DOMAIN_JIAN | DOMAIN_HAZARD;
 
 export const HAZARDS = [
   { key: "puddle", label: "웅덩이", emoji: "💧", fromLevel: 1, rule: "주변 8칸", description: "이 칸을 둘러싼 8칸 안의 웅덩이 수예요.", example: "💧 2라면 바로 주변 8칸 중 웅덩이가 2곳이에요." },
@@ -21,6 +19,22 @@ export function getHazardForLevel(level = 1) {
   return HAZARDS.filter((hazard) => level >= hazard.fromLevel).at(-1) ?? HAZARDS[0];
 }
 
+export function getHazardsForLevel(level = 1) {
+  const safeLevel = clampLevel(level);
+  if (safeLevel < 4) return [HAZARDS[0]];
+  if (safeLevel < 7) return [HAZARDS[1]];
+  if (safeLevel < 10) return [HAZARDS[2]];
+  if (safeLevel < 13) return [HAZARDS[3]];
+  if (safeLevel < 20) return [HAZARDS[4]];
+  if (safeLevel < 25) return [HAZARDS[0], HAZARDS[4]];
+  if (safeLevel < 30) return [HAZARDS[0], HAZARDS[1]];
+  if (safeLevel < 35) return [HAZARDS[1], HAZARDS[4]];
+  if (safeLevel < 40) return [HAZARDS[0], HAZARDS[3]];
+  if (safeLevel < 45) return [HAZARDS[1], HAZARDS[2]];
+  if (safeLevel < 50) return [HAZARDS[2], HAZARDS[3]];
+  return [HAZARDS[1], HAZARDS[2], HAZARDS[3]];
+}
+
 export function createGame(level = 1) {
   const safeLevel = clampLevel(level);
   const config = getLevelConfig(safeLevel);
@@ -32,6 +46,7 @@ export function createGame(level = 1) {
     openedSafeCount: 0,
     flags: 0,
     hazardMarks: 0,
+    hazardMarkCounts: Object.fromEntries(config.hazards.map((hazard) => [hazard.key, 0])),
     firstClickDone: false,
     startedAt: null,
     elapsedSeconds: 0,
@@ -42,48 +57,59 @@ export function createGame(level = 1) {
     hintedCells: new Set(),
     combo: 0,
     bestCombo: 0,
+    score: 0,
   };
 }
 
 export function getLevelConfig(level = 1) {
   const safeLevel = clampLevel(level);
   if (safeLevel === 1) {
+    const hazards = getHazardsForLevel(safeLevel);
     return {
       rows: 4,
       cols: 4,
       jianCount: 1,
       bombCount: 1,
       hazardCount: 1,
+      hazardCounts: { puddle: 1 },
       hintCount: 3,
       timeLimitSeconds: getTimeLimitForLevel(safeLevel),
-      hazard: getHazardForLevel(safeLevel),
+      hazard: hazards[0],
+      hazards,
       tutorial: true,
+      tutorialNoTimer: true,
       tutorialStart: TUTORIAL_START,
     };
   }
-  const boardSize = Math.min(16, 4 + Math.ceil(safeLevel / 8));
-  const jianCount = Math.min(26, 1 + Math.ceil((safeLevel - 1) / 4));
-  const hazardCount = Math.min(20, 1 + Math.floor((safeLevel - 1) / 5));
+  const boardSize = Math.min(13, 4 + Math.ceil(safeLevel / 6));
+  const jianCount = Math.min(14, 1 + Math.ceil((safeLevel - 1) / 4));
+  const hazardCount = Math.min(12, 1 + Math.floor((safeLevel - 1) / 4));
+  const hazards = getHazardsForLevel(safeLevel);
+  const hazardCounts = Object.fromEntries(hazards.map((hazard, index) => [hazard.key, Math.floor(hazardCount / hazards.length) + (index < hazardCount % hazards.length ? 1 : 0)]));
   return {
     rows: boardSize,
     cols: boardSize,
     jianCount,
     bombCount: hazardCount,
     hazardCount,
+    hazardCounts,
     hintCount: 3,
     timeLimitSeconds: getTimeLimitForLevel(safeLevel),
-    hazard: getHazardForLevel(safeLevel),
+    hazard: hazards[0],
+    hazards,
+    mixedHazards: hazards.length > 1,
     tutorial: false,
   };
 }
 
 export function getTimeLimitForLevel(level = 1) {
   const safeLevel = clampLevel(level);
-  if (safeLevel === 1) return 75;
-  const boardSize = Math.min(16, 4 + Math.ceil(safeLevel / 8));
-  const jianCount = Math.min(26, 1 + Math.ceil((safeLevel - 1) / 4));
-  const hazardCount = Math.min(20, 1 + Math.floor((safeLevel - 1) / 5));
-  const complexity = boardSize * boardSize + jianCount * 6 + hazardCount * 5;
+  if (safeLevel === 1) return 0;
+  const boardSize = Math.min(13, 4 + Math.ceil(safeLevel / 6));
+  const jianCount = Math.min(14, 1 + Math.ceil((safeLevel - 1) / 4));
+  const hazardCount = Math.min(12, 1 + Math.floor((safeLevel - 1) / 4));
+  const hazardKinds = getHazardsForLevel(safeLevel).length;
+  const complexity = boardSize * boardSize + jianCount * 6 + hazardCount * 5 + (hazardKinds - 1) * 28;
   return Math.ceil((35 + complexity * 1.25) / 15) * 15;
 }
 
@@ -103,11 +129,15 @@ export function createEmptyBoard(rows, cols) {
       col,
       hasJian: false,
       hasBomb: false,
+      hazardKey: null,
       adjacentCount: 0,
       adjacentBombCount: 0,
+      adjacentHazardCounts: {},
       isOpen: false,
       isFlagged: false,
       isHazardMarked: false,
+      hazardMarkKey: null,
+      hasScoredMark: false,
       isFound: false,
       isHinted: false,
       isHintSource: false,
@@ -118,15 +148,18 @@ export function createEmptyBoard(rows, cols) {
 }
 
 export function placeJians(game, safeRow, safeCol, random = Math.random) {
-  const { rows, cols, jianCount, bombCount = 0 } = game.config;
+  const { rows, cols, jianCount, bombCount = 0, hazards, hazardCounts } = game.config;
   if (game.config.tutorial) {
     const board = createEmptyBoard(rows, cols);
     for (const [row, col] of TUTORIAL_JIANS) board[row][col].hasJian = true;
-    for (const [row, col] of TUTORIAL_HAZARDS) board[row][col].hasBomb = true;
-    calculateAdjacentCounts(board, game.config.hazard.key);
+    for (const [row, col] of TUTORIAL_HAZARDS) {
+      board[row][col].hasBomb = true;
+      board[row][col].hazardKey = game.config.hazard.key;
+    }
+    calculateAdjacentCounts(board, hazards);
     game.board = board;
     game.generationAttempts = 1;
-    game.isLogicVerified = isLogicallySolvable(board, safeRow, safeCol, jianCount, bombCount, game.config.hazard.key);
+    game.isLogicVerified = isLogicallySolvable(board, safeRow, safeCol, jianCount, hazardCounts, hazards);
     game.firstClickDone = true;
     game.status = "playing";
     return;
@@ -156,14 +189,25 @@ export function placeJians(game, safeRow, safeCol, random = Math.random) {
   }
 
   let selectedBoard = null;
+  const placeTargets = (board, orderedCandidates) => {
+    for (const [row, col] of orderedCandidates.slice(0, jianCount)) board[row][col].hasJian = true;
+    let offset = jianCount;
+    for (const hazard of hazards) {
+      const count = hazardCounts[hazard.key] ?? 0;
+      for (const [row, col] of orderedCandidates.slice(offset, offset + count)) {
+        board[row][col].hasBomb = true;
+        board[row][col].hazardKey = hazard.key;
+      }
+      offset += count;
+    }
+  };
   let attempts = 0;
   for (; attempts < MAX_GENERATION_ATTEMPTS; attempts += 1) {
     const board = createEmptyBoard(rows, cols);
     shuffle(candidates, random);
-    for (const [row, col] of candidates.slice(0, jianCount)) board[row][col].hasJian = true;
-    for (const [row, col] of candidates.slice(jianCount, jianCount + bombCount)) board[row][col].hasBomb = true;
-    calculateAdjacentCounts(board, game.config.hazard.key);
-    if (isLogicallySolvable(board, safeRow, safeCol, jianCount, bombCount, game.config.hazard.key)) {
+    placeTargets(board, candidates);
+    calculateAdjacentCounts(board, hazards);
+    if (isLogicallySolvable(board, safeRow, safeCol, jianCount, hazardCounts, hazards)) {
       selectedBoard = board;
       break;
     }
@@ -176,27 +220,42 @@ export function placeJians(game, safeRow, safeCol, random = Math.random) {
       const distanceB = Math.abs(rowB - safeRow) + Math.abs(colB - safeCol);
       return distanceA - distanceB || rowA - rowB || colA - colB;
     });
-    for (const [row, col] of ordered.slice(0, jianCount)) selectedBoard[row][col].hasJian = true;
-    for (const [row, col] of ordered.slice(jianCount, jianCount + bombCount)) selectedBoard[row][col].hasBomb = true;
-    calculateAdjacentCounts(selectedBoard, game.config.hazard.key);
-    if (!isLogicallySolvable(selectedBoard, safeRow, safeCol, jianCount, bombCount, game.config.hazard.key)) {
+    placeTargets(selectedBoard, ordered);
+    calculateAdjacentCounts(selectedBoard, hazards);
+    if (!isLogicallySolvable(selectedBoard, safeRow, safeCol, jianCount, hazardCounts, hazards)) {
       throw new Error("논리적으로 풀 수 있는 구조 보드를 만들지 못했습니다.");
     }
   }
 
   game.board = selectedBoard;
   game.generationAttempts = attempts + 1;
-  game.isLogicVerified = isLogicallySolvable(selectedBoard, safeRow, safeCol, jianCount, bombCount, game.config.hazard.key);
+  game.isLogicVerified = isLogicallySolvable(selectedBoard, safeRow, safeCol, jianCount, hazardCounts, hazards);
   game.firstClickDone = true;
   game.status = "playing";
 }
 
-export function isLogicallySolvable(board, startRow, startCol, jianTotal, hazardTotal, hazardKey = "puddle") {
+function normalizeHazardSpec(board, hazardTotals, hazardSpec) {
+  if (Array.isArray(hazardSpec)) {
+    const totals = typeof hazardTotals === "object" ? hazardTotals : Object.fromEntries(hazardSpec.map((hazard, index) => [hazard.key, index === 0 ? hazardTotals : 0]));
+    return { hazards: hazardSpec, totals };
+  }
+  const key = typeof hazardSpec === "string" ? hazardSpec : "puddle";
+  const hazard = HAZARDS.find((item) => item.key === key) ?? HAZARDS[0];
+  return { hazards: [hazard], totals: { [hazard.key]: typeof hazardTotals === "number" ? hazardTotals : board.flat().filter((cell) => cell.hazardKey === hazard.key || cell.hasBomb).length } };
+}
+
+function makeDomainTypes(hazards) {
+  const hazardTypes = Object.fromEntries(hazards.map((hazard, index) => [hazard.key, 1 << (index + 2)]));
+  return { hazardTypes, unknown: DOMAIN_SAFE | DOMAIN_JIAN | Object.values(hazardTypes).reduce((mask, type) => mask | type, 0) };
+}
+
+export function isLogicallySolvable(board, startRow, startCol, jianTotal, hazardTotals, hazardSpec = "puddle") {
   const rows = board.length;
   const cols = board[0]?.length ?? 0;
   if (!board[startRow]?.[startCol] || board[startRow][startCol].hasJian || board[startRow][startCol].hasBomb) return false;
-
-  const domains = Array.from({ length: rows }, () => Array(cols).fill(DOMAIN_UNKNOWN));
+  const { hazards, totals } = normalizeHazardSpec(board, hazardTotals, hazardSpec);
+  const { hazardTypes, unknown } = makeDomainTypes(hazards);
+  const domains = Array.from({ length: rows }, () => Array(cols).fill(unknown));
   const opened = Array.from({ length: rows }, () => Array(cols).fill(false));
 
   const openSafe = (startR, startC) => {
@@ -207,96 +266,82 @@ export function isLogicallySolvable(board, startRow, startCol, jianTotal, hazard
       if (!cell || opened[row][col] || cell.hasJian || cell.hasBomb) continue;
       domains[row][col] = DOMAIN_SAFE;
       opened[row][col] = true;
-      if (cell.adjacentCount === 0 && cell.adjacentBombCount === 0) {
-        const hazardArea = new Set(hazardNeighbors(rows, cols, row, col, hazardKey).map(([r, c]) => keyOf(r, c)));
-        for (const next of neighbors(rows, cols, row, col)) {
-          if (hazardArea.has(keyOf(next[0], next[1]))) queue.push(next);
-        }
-      }
+      const noClues = cell.adjacentCount === 0 && hazards.every((hazard) => (cell.adjacentHazardCounts?.[hazard.key] ?? (hazards.length === 1 ? cell.adjacentBombCount : 0)) === 0);
+      if (noClues) for (const next of neighbors(rows, cols, row, col)) queue.push(next);
     }
   };
 
   openSafe(startRow, startCol);
   for (const [row, col] of neighbors(rows, cols, startRow, startCol)) openSafe(row, col);
-  const maxPasses = rows * cols * 4;
-  for (let pass = 0; pass < maxPasses; pass += 1) {
+  const allCells = Array.from({ length: rows * cols }, (_, index) => [Math.floor(index / cols), index % cols]);
+  for (let pass = 0; pass < rows * cols * 6; pass += 1) {
     let changed = false;
-
     const constrain = (cells, clue, type) => {
       const known = cells.filter(([row, col]) => domains[row][col] === type).length;
-      const candidatesForType = cells.filter(([row, col]) => domains[row][col] !== type && (domains[row][col] & type));
+      const candidates = cells.filter(([row, col]) => domains[row][col] !== type && (domains[row][col] & type));
       const remaining = clue - known;
-      if (remaining < 0 || remaining > candidatesForType.length) return false;
-      for (const [row, col] of candidatesForType) {
+      if (remaining < 0 || remaining > candidates.length) return false;
+      for (const [row, col] of candidates) {
         const before = domains[row][col];
         if (remaining === 0) domains[row][col] &= ~type;
-        else if (remaining === candidatesForType.length) domains[row][col] = type;
+        else if (remaining === candidates.length) domains[row][col] = type;
         if (domains[row][col] === 0) return false;
         if (domains[row][col] !== before) changed = true;
       }
       return true;
     };
 
-    for (let row = 0; row < rows; row += 1) {
-      for (let col = 0; col < cols; col += 1) {
-        if (!opened[row][col]) continue;
-        const around = neighbors(rows, cols, row, col);
-        const hazardArea = hazardNeighbors(rows, cols, row, col, hazardKey);
-        if (!constrain(around, board[row][col].adjacentCount, DOMAIN_JIAN)) return false;
-        if (!constrain(hazardArea, board[row][col].adjacentBombCount, DOMAIN_HAZARD)) return false;
+    for (let row = 0; row < rows; row += 1) for (let col = 0; col < cols; col += 1) {
+      if (!opened[row][col]) continue;
+      const cell = board[row][col];
+      if (!constrain(neighbors(rows, cols, row, col), cell.adjacentCount, DOMAIN_JIAN)) return false;
+      for (const hazard of hazards) {
+        const clue = cell.adjacentHazardCounts?.[hazard.key] ?? (hazards.length === 1 ? cell.adjacentBombCount : 0);
+        if (!constrain(hazardNeighbors(rows, cols, row, col, hazard.key), clue, hazardTypes[hazard.key])) return false;
       }
     }
-
-    const allCells = [];
-    for (let row = 0; row < rows; row += 1) for (let col = 0; col < cols; col += 1) allCells.push([row, col]);
     if (!constrain(allCells, jianTotal, DOMAIN_JIAN)) return false;
-    if (!constrain(allCells, hazardTotal, DOMAIN_HAZARD)) return false;
+    for (const hazard of hazards) if (!constrain(allCells, totals[hazard.key] ?? 0, hazardTypes[hazard.key])) return false;
 
-    for (let row = 0; row < rows; row += 1) {
-      for (let col = 0; col < cols; col += 1) {
-        if (domains[row][col] === DOMAIN_SAFE && !opened[row][col]) {
-          if (board[row][col].hasJian || board[row][col].hasBomb) return false;
-          openSafe(row, col);
-          changed = true;
-        }
+    for (let row = 0; row < rows; row += 1) for (let col = 0; col < cols; col += 1) {
+      if (domains[row][col] === DOMAIN_SAFE && !opened[row][col]) {
+        if (board[row][col].hasJian || board[row][col].hasBomb) return false;
+        openSafe(row, col);
+        changed = true;
       }
     }
-
-    const foundJians = domains.flat().filter((domain) => domain === DOMAIN_JIAN).length;
-    const foundHazards = domains.flat().filter((domain) => domain === DOMAIN_HAZARD).length;
-    if (foundJians === jianTotal && foundHazards === hazardTotal) return true;
+    const solvedJians = domains.flat().filter((domain) => domain === DOMAIN_JIAN).length === jianTotal;
+    const solvedHazards = hazards.every((hazard) => domains.flat().filter((domain) => domain === hazardTypes[hazard.key]).length === (totals[hazard.key] ?? 0));
+    if (solvedJians && solvedHazards) return true;
     if (!changed) return false;
   }
   return false;
 }
 
-export function calculateAdjacentCounts(board, hazardKey = "puddle") {
+export function calculateAdjacentCounts(board, hazardSpec = "puddle") {
   const rows = board.length;
   const cols = board[0]?.length ?? 0;
-  for (const row of board) {
-    for (const cell of row) {
-      cell.adjacentCount = neighbors(rows, cols, cell.row, cell.col).filter(
-        ([r, c]) => board[r][c].hasJian,
-      ).length;
-      cell.adjacentBombCount = hazardNeighbors(rows, cols, cell.row, cell.col, hazardKey).filter(
-        ([r, c]) => board[r][c].hasBomb,
-      ).length;
-    }
+  const hazards = Array.isArray(hazardSpec) ? hazardSpec : [HAZARDS.find((hazard) => hazard.key === hazardSpec) ?? HAZARDS[0]];
+  for (const row of board) for (const cell of row) {
+    cell.adjacentCount = neighbors(rows, cols, cell.row, cell.col).filter(([r, c]) => board[r][c].hasJian).length;
+    cell.adjacentHazardCounts = Object.fromEntries(hazards.map((hazard) => [hazard.key, hazardNeighbors(rows, cols, cell.row, cell.col, hazard.key).filter(([r, c]) => board[r][c].hazardKey === hazard.key || (hazards.length === 1 && !board[r][c].hazardKey && board[r][c].hasBomb)).length]));
+    cell.adjacentBombCount = Object.values(cell.adjacentHazardCounts).reduce((sum, count) => sum + count, 0);
   }
 }
 
 export function getLogicalHint(game) {
   if (!game.firstClickDone || game.status !== "playing") return null;
-  const { rows, cols, jianCount, hazardCount, hazard } = game.config;
-  const domains = Array.from({ length: rows }, () => Array(cols).fill(DOMAIN_UNKNOWN));
+  const { rows, cols, jianCount, hazards, hazardCounts } = game.config;
+  const { hazardTypes, unknown } = makeDomainTypes(hazards);
+  const domains = Array.from({ length: rows }, () => Array(cols).fill(unknown));
   const reasons = Array.from({ length: rows }, () => Array(cols).fill(null));
 
   for (const row of game.board) {
     for (const cell of row) {
       if (cell.isOpen && cell.hasJian) domains[cell.row][cell.col] = DOMAIN_JIAN;
-      else if (cell.isOpen && cell.hasBomb) domains[cell.row][cell.col] = DOMAIN_HAZARD;
+      else if (cell.isOpen && cell.hasBomb) domains[cell.row][cell.col] = hazardTypes[cell.hazardKey];
       else if (cell.isOpen) domains[cell.row][cell.col] = DOMAIN_SAFE;
-      else if (cell.isHazardMarked && cell.hasBomb) domains[cell.row][cell.col] = DOMAIN_HAZARD;
+      else if (cell.isHazardMarked && cell.hazardMarkKey && hazardTypes[cell.hazardMarkKey]) domains[cell.row][cell.col] = hazardTypes[cell.hazardMarkKey];
     }
   }
 
@@ -304,7 +349,7 @@ export function getLogicalHint(game) {
     const cell = game.board[row][col];
     if (type === DOMAIN_SAFE) return !cell.isOpen;
     if (type === DOMAIN_JIAN) return !cell.isFound;
-    return !cell.isHazardMarked;
+    return !cell.isHazardMarked || hazardTypes[cell.hazardMarkKey] !== type;
   };
 
   const makeHint = (row, col, type) => {
@@ -312,6 +357,7 @@ export function getLogicalHint(game) {
     const source = reason?.source ?? null;
     const position = `${row + 1}행 ${col + 1}열`;
     const sourcePosition = source ? `${source.row + 1}행 ${source.col + 1}열` : "전체 목표 수";
+    const hazard = hazards.find((item) => hazardTypes[item.key] === type);
     const kind = type === DOMAIN_SAFE ? "safe" : type === DOMAIN_JIAN ? "jian" : "hazard";
     const needsUnmark = game.board[row][col].isHazardMarked && kind !== "hazard";
     const action = kind === "hazard" ? "위험 표시" : needsUnmark ? "위험 표시 해제 후 열기" : "열기";
@@ -320,6 +366,7 @@ export function getLogicalHint(game) {
       source,
       target: { row, col },
       kind,
+      hazardKey: hazard?.key ?? null,
       action,
       sourcePosition,
       targetPosition: position,
@@ -350,19 +397,19 @@ export function getLogicalHint(game) {
         if (!cell.isOpen || cell.hasJian || cell.hasBomb) continue;
         const source = { row: cell.row, col: cell.col };
         constrain(neighbors(rows, cols, cell.row, cell.col), cell.adjacentCount, DOMAIN_JIAN, source);
-        constrain(hazardNeighbors(rows, cols, cell.row, cell.col, hazard.key), cell.adjacentBombCount, DOMAIN_HAZARD, source);
+        for (const hazard of hazards) constrain(hazardNeighbors(rows, cols, cell.row, cell.col, hazard.key), cell.adjacentHazardCounts[hazard.key] ?? 0, hazardTypes[hazard.key], source);
       }
     }
 
     const allCells = [];
     for (let row = 0; row < rows; row += 1) for (let col = 0; col < cols; col += 1) allCells.push([row, col]);
     constrain(allCells, jianCount, DOMAIN_JIAN);
-    constrain(allCells, hazardCount, DOMAIN_HAZARD);
+    for (const hazard of hazards) constrain(allCells, hazardCounts[hazard.key] ?? 0, hazardTypes[hazard.key]);
 
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {
         const type = domains[row][col];
-        if ([DOMAIN_SAFE, DOMAIN_JIAN, DOMAIN_HAZARD].includes(type) && isActionable(row, col, type)) {
+        if ([DOMAIN_SAFE, DOMAIN_JIAN, ...Object.values(hazardTypes)].includes(type) && isActionable(row, col, type)) {
           return makeHint(row, col, type);
         }
       }
@@ -391,6 +438,8 @@ export function openCell(game, row, col, random = Math.random) {
     cell.isOpen = true;
     game.status = "lost";
     game.lossReason = "hazard";
+    game.lossHazardKey = cell.hazardKey;
+    game.combo = 0;
     revealAfterLoss(game);
     return game.status;
   }
@@ -401,12 +450,15 @@ export function openCell(game, row, col, random = Math.random) {
     return game.status;
   }
 
+  const openedBefore = game.openedSafeCount;
   openSafeArea(game, row, col);
   if (isFirstOpen) {
     for (const [safeRow, safeCol] of neighbors(game.config.rows, game.config.cols, row, col)) {
       openSafeArea(game, safeRow, safeCol);
     }
   }
+  const openedNow = game.openedSafeCount - openedBefore;
+  if (openedNow > 0) addComboScore(game, openedNow * 10);
   if (hasCompletedMission(game)) finishWithWin(game);
   return game.status;
 }
@@ -429,6 +481,7 @@ export function toggleFlag(game, row, col) {
   if (!cell.hasJian || cell.isHazardMarked) {
     cell.isWrongFlag = true;
     game.status = "lost";
+    game.combo = 0;
     revealAfterLoss(game);
     return game.status;
   }
@@ -436,24 +489,37 @@ export function toggleFlag(game, row, col) {
   cell.isFlagged = !cell.isFlagged;
   cell.isFound = cell.isFlagged;
   game.flags += cell.isFlagged ? 1 : -1;
-  game.combo = cell.isFlagged ? game.combo + 1 : 0;
-  game.bestCombo = Math.max(game.bestCombo, game.combo);
+  if (cell.isFlagged) addComboScore(game, 150);
+  else game.combo = 0;
   if (hasCompletedMission(game)) finishWithWin(game);
   return game.status;
 }
 
-export function toggleHazardMark(game, row, col) {
+export function toggleHazardMark(game, row, col, hazardKey = game.config.hazard.key) {
   if (!canReceiveInput(game) || !game.firstClickDone) return game.status;
   const cell = getCell(game, row, col);
   if (!cell || cell.isOpen) return game.status;
 
-  if (cell.isFlagged) return game.status;
-  if (!cell.isHazardMarked && game.hazardMarks >= game.config.hazardCount) return game.status;
-
-  cell.isHazardMarked = !cell.isHazardMarked;
-  game.hazardMarks += cell.isHazardMarked ? 1 : -1;
-  game.combo = cell.isHazardMarked ? game.combo + 1 : 0;
-  game.bestCombo = Math.max(game.bestCombo, game.combo);
+  if (cell.isFlagged || !game.config.hazardCounts[hazardKey]) return game.status;
+  const previousKey = cell.hazardMarkKey;
+  if (previousKey === hazardKey) {
+    cell.isHazardMarked = false;
+    cell.hazardMarkKey = null;
+    game.hazardMarks -= 1;
+    game.hazardMarkCounts[hazardKey] -= 1;
+    game.combo = 0;
+  } else {
+    if ((game.hazardMarkCounts[hazardKey] ?? 0) >= game.config.hazardCounts[hazardKey]) return game.status;
+    if (previousKey) game.hazardMarkCounts[previousKey] -= 1;
+    else game.hazardMarks += 1;
+    cell.isHazardMarked = true;
+    cell.hazardMarkKey = hazardKey;
+    game.hazardMarkCounts[hazardKey] = (game.hazardMarkCounts[hazardKey] ?? 0) + 1;
+    if (!cell.hasScoredMark) {
+      cell.hasScoredMark = true;
+      addComboScore(game, 15);
+    }
+  }
   if (hasCompletedMission(game)) finishWithWin(game);
   return game.status;
 }
@@ -474,6 +540,7 @@ export function useHint(game) {
     game.hintsUsed += 1;
     const penalty = [5, 10, 20][game.hintsUsed - 1] ?? 20;
     game.hintPenaltySeconds += penalty;
+    game.combo = 0;
     consumed = true;
   } else {
     game.activeHint.stage += 1;
@@ -509,11 +576,8 @@ export function openSafeArea(game, startRow, startCol) {
     cell.isOpen = true;
     game.openedSafeCount += 1;
 
-    if (cell.adjacentCount === 0 && cell.adjacentBombCount === 0) {
-      const hazardArea = new Set(hazardNeighbors(rows, cols, row, col, game.config.hazard.key).map(([r, c]) => keyOf(r, c)));
-      for (const next of neighbors(rows, cols, row, col)) {
-        if (hazardArea.has(keyOf(next[0], next[1]))) queue.push(next);
-      }
+    if (cell.adjacentCount === 0 && game.config.hazards.every((hazard) => (cell.adjacentHazardCounts[hazard.key] ?? 0) === 0)) {
+      for (const next of neighbors(rows, cols, row, col)) queue.push(next);
     }
   }
 }
@@ -524,7 +588,7 @@ export function revealAfterLoss(game) {
       if (cell.hasJian) cell.isOpen = true;
       if (cell.hasBomb) cell.isOpen = true;
       if (cell.isFlagged && !cell.hasJian) cell.isWrongFlag = true;
-      if (cell.isHazardMarked && !cell.hasBomb) cell.isWrongFlag = true;
+      if (cell.isHazardMarked && cell.hazardMarkKey !== (cell.hazardKey ?? game.config.hazard.key)) cell.isWrongFlag = true;
     }
   }
 }
@@ -546,7 +610,7 @@ export function getFoundJianMarks(game) {
 }
 
 export function getFoundHazardMarks(game) {
-  return game.board.flat().filter((cell) => cell.hasBomb && cell.isHazardMarked).length;
+  return game.board.flat().filter((cell) => cell.hasBomb && cell.isHazardMarked && cell.hazardMarkKey === (cell.hazardKey ?? game.config.hazard.key)).length;
 }
 
 export function hasMarkedAllHazards(game) {
@@ -619,6 +683,7 @@ function canReceiveInput(game) {
 
 function finishWithWin(game) {
   game.status = "won";
+  game.score += game.remainingSeconds * 5 + game.bestCombo * 20;
   revealJiansAfterWin(game);
 }
 
@@ -628,6 +693,13 @@ function findJian(game, cell) {
   cell.isOpen = true;
   cell.isFlagged = true;
   game.flags += 1;
+  addComboScore(game, 150);
+}
+
+function addComboScore(game, base) {
+  game.combo += 1;
+  game.bestCombo = Math.max(game.bestCombo, game.combo);
+  game.score += base + Math.min(game.combo - 1, 10) * 5;
 }
 
 function keyOf(row, col) {
