@@ -1,10 +1,10 @@
-const CACHE_VERSION = "jian-rescue-v26";
+const CACHE_VERSION = "jian-rescue-v27";
 const APP_SHELL = [
   "./",
   "index.html",
   "favicon.ico",
   "styles/app.css?v=26",
-  "src/app.js?v=26",
+  "src/app.js?v=27",
   "src/game.js?v=26",
   "manifest.webmanifest",
   "assets/logo.svg",
@@ -15,23 +15,17 @@ const APP_SHELL = [
   "assets/og-image.png",
   "assets/icon-192.png",
   "assets/icon-512.png",
-  "assets/faces/face-01.png",
-  "assets/faces/face-02.png",
-  "assets/faces/face-03.png",
-  "assets/faces/face-04.png",
-  "assets/faces/face-05.png",
-  "assets/faces/face-06.png",
-  "assets/faces/face-07.png",
-  "assets/faces/face-08.png",
-  "assets/faces/face-09.png",
-  "assets/faces/face-10.png",
+  "assets/avatars/jian-smile.png",
+  "assets/avatars/jian-brave.png",
+  "assets/avatars/jian-cheer.png",
+  "assets/avatars/jian-salute.png",
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) =>
       cache.addAll(APP_SHELL).catch(async () => {
-        const requiredShell = APP_SHELL.filter((path) => !path.startsWith("assets/faces/"));
+        const requiredShell = APP_SHELL.filter((path) => !path.startsWith("assets/avatars/"));
         await cache.addAll(requiredShell);
       }),
     ),

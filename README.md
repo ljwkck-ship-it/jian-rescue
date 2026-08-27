@@ -128,7 +128,7 @@ npm run serve
 - 로고: `assets/logo.svg`, `assets/jian-rescue-mascot.png`
 - 공유 이미지: `assets/og-image.png`
 - 논리 힌트 아이콘: `assets/momo-safety-lantern.png`
-- 레벨마다 목표 얼굴은 `assets/faces/face-01.png`부터 `face-10.png`까지 순환합니다.
+- 실사 사진은 저장소에 포함하지 않습니다. 레벨마다 오리지널 일러스트 마스코트 4종(`assets/avatars/`)이 순환합니다.
 
 ## 설치
 
@@ -141,5 +141,5 @@ localhost 또는 HTTPS에서 Safari, Chrome, Edge로 바로 플레이하거나 �
 ## 운영 메모
 
 - 저장소·배포: https://github.com/ljwkck-ship-it/jian-rescue / https://ljwkck-ship-it.github.io/jian-rescue/
-- 가족 얼굴 크롭본은 공개 테스트에 동의한 자산만 사용합니다. 공개 범위가 바뀌면 계속 공개할지 다시 검토합니다.
+- 개인 사진이나 실사 얼굴은 저장소와 게임 에셋에 사용하지 않습니다.
 - Pretendard와 Baloo 2는 CDN으로 불러옵니다. 오프라인 환경에서 글꼴까지 보장하려면 향후 자체 호스팅 전략을 검토합니다.

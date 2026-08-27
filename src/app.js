@@ -18,9 +18,14 @@ const HAZARD_PRACTICE_KEY = "jian-rescue-hazard-practice-v1";
 const STARS_KEY = "jian-rescue-level-stars-v1";
 const SCORES_KEY = "jian-rescue-level-scores-v1";
 const IDLE_HINT_DELAY_MS = 18_000;
-const FACE_SRCS = Array.from({ length: 10 }, (_, index) =>
-  `assets/faces/face-${String(index + 1).padStart(2, "0")}.png`,
-);
+// These are original illustrations, not photographs or derivatives of a real child.
+// Rotate the rescue mascot with each level so every operation gets its own mood.
+const AVATAR_SRCS = [
+  "assets/avatars/jian-smile.png",
+  "assets/avatars/jian-brave.png",
+  "assets/avatars/jian-cheer.png",
+  "assets/avatars/jian-salute.png",
+];
 
 const boardEl = document.querySelector("#board");
 const newGameEl = document.querySelector("#new-game");
@@ -46,7 +51,7 @@ let highestUnlocked = readHighestUnlocked(currentLevel);
 let game = createGame(currentLevel);
 let focused = { row: 0, col: 0 };
 let timerId = null;
-let currentFaceSrc = getFaceForLevel(currentLevel);
+let currentAvatarSrc = getAvatarForLevel(currentLevel);
 let deferredInstallPrompt = null;
 let longPressTimer = null;
 let longPressHandled = false;
@@ -66,7 +71,7 @@ function startNewGame(options = { advanceLevel: false }) {
   highestUnlocked = Math.max(highestUnlocked, currentLevel);
   saveCurrentLevel(currentLevel);
   saveHighestUnlocked(highestUnlocked);
-  currentFaceSrc = getFaceForLevel(currentLevel);
+  currentAvatarSrc = getAvatarForLevel(currentLevel);
   game = createGame(currentLevel);
   boardMode = "open";
   updateBoardModeControls();
@@ -247,7 +252,7 @@ function showJianRescuedEffect(found, total) {
   const pop = document.createElement("div");
   pop.className = "jian-rescue-pop";
   pop.setAttribute("role", "status");
-  pop.innerHTML = `<img src="${currentFaceSrc}" alt="" /><span><b>${found === total ? "지안을 모두 구했어요!" : "지안을 구했어요!"}</b><small>구조 ${found}/${total}</small></span><i aria-hidden="true">✨</i>`;
+  pop.innerHTML = `<img src="${currentAvatarSrc}" alt="" /><span><b>${found === total ? "지안을 모두 구했어요!" : "지안을 구했어요!"}</b><small>구조 ${found}/${total}</small></span><i aria-hidden="true">✨</i>`;
   document.body.appendChild(pop);
   window.setTimeout(() => pop.remove(), 1500);
 }
@@ -318,7 +323,7 @@ function renderMission() {
   const dangerCards = hazards.map((hazard) => `<div class="mission-danger"><span class="danger-emoji" aria-hidden="true">${hazard.emoji}</span><div><span>표시할 위험</span><strong>${hazard.label} <b>${hazardCounts[hazard.key]}</b>곳</strong><small>${hazard.rule}</small></div></div>`).join("");
   const guides = hazards.map((hazard) => `<details class="hazard-guide"><summary>${hazard.emoji} ${hazard.label} 단서 읽는 법</summary><p><b>범위:</b> ${hazard.description}</p><p><b>예시:</b> ${hazard.example}</p><button type="button" data-practice-hazard="${hazard.key}">직접 연습하기</button></details>`).join("");
   const mixedNotice = hazards.length > 1 ? `<p class="mixed-mission-note">복합 작전 · 위험마다 표시 버튼과 숫자 범위가 달라요.</p>` : "";
-  missionEl.innerHTML = `<div class="mission-kicker">${game.config.tutorial ? "TUTORIAL · 시간 제한 없는 연습" : `PURE LOGIC · LEVEL ${currentLevel}`}</div><div class="mission-target"><img src="${currentFaceSrc}" alt="구해야 할 지안의 얼굴" width="52" height="52" /><div><span>구해야 할 지안</span><strong>지안 <b>${jianCount}</b>명</strong></div></div><div class="mission-arrow" aria-hidden="true">＋</div><div class="mission-danger-list">${dangerCards}</div><button id="use-helper" class="helper-item${hintSuggested ? " is-suggested" : ""}" type="button" ${hintDisabled ? "disabled" : ""} aria-label="논리 힌트 사용"><img src="assets/momo-safety-lantern.png" alt="" width="36" height="36" /><span><b>논리 힌트${activeHintStep ? ` ${activeHintStep}/3` : ""}</b><small>${game.firstClickDone ? hintGuide : "첫 칸을 열면 사용할 수 있어요"}</small></span></button>${mixedNotice}<div class="hazard-guides">${guides}</div><p>${hazards.map((hazard) => `${hazard.emoji} ${hazard.rule}`).join(" · ")}</p>${tutorial}`;
+  missionEl.innerHTML = `<div class="mission-kicker">${game.config.tutorial ? "TUTORIAL · 시간 제한 없는 연습" : `PURE LOGIC · LEVEL ${currentLevel}`}</div><div class="mission-target"><img src="${currentAvatarSrc}" alt="구해야 할 지안 캐릭터" width="52" height="52" /><div><span>구해야 할 지안</span><strong>지안 <b>${jianCount}</b>명</strong></div></div><div class="mission-arrow" aria-hidden="true">＋</div><div class="mission-danger-list">${dangerCards}</div><button id="use-helper" class="helper-item${hintSuggested ? " is-suggested" : ""}" type="button" ${hintDisabled ? "disabled" : ""} aria-label="논리 힌트 사용"><img src="assets/momo-safety-lantern.png" alt="" width="36" height="36" /><span><b>논리 힌트${activeHintStep ? ` ${activeHintStep}/3` : ""}</b><small>${game.firstClickDone ? hintGuide : "첫 칸을 열면 사용할 수 있어요"}</small></span></button>${mixedNotice}<div class="hazard-guides">${guides}</div><p>${hazards.map((hazard) => `${hazard.emoji} ${hazard.rule}`).join(" · ")}</p>${tutorial}`;
 }
 
 function getUnseenHazard() {
@@ -451,7 +456,7 @@ function renderCell(cell) {
   } else if (cell.isOpen && cell.hasJian) {
     button.classList.add("is-jian");
     const img = document.createElement("img");
-    img.src = currentFaceSrc;
+    img.src = currentAvatarSrc;
     img.alt = "";
     button.appendChild(img);
   } else if (cell.isOpen && (cell.adjacentCount || cell.adjacentBombCount)) {
@@ -531,7 +536,7 @@ function readCurrentLevel() { const value = Number(localStorage.getItem(LEVEL_KE
 function readHighestUnlocked(fallback) { const value = Number(localStorage.getItem(UNLOCKED_LEVEL_KEY)); return Number.isSafeInteger(value) && value > 0 ? clampLevel(value) : fallback; }
 function saveCurrentLevel(level) { localStorage.setItem(LEVEL_KEY, String(level)); }
 function saveHighestUnlocked(level) { localStorage.setItem(UNLOCKED_LEVEL_KEY, String(level)); }
-function getFaceForLevel(level) { return FACE_SRCS[(level - 1) % FACE_SRCS.length]; }
+function getAvatarForLevel(level) { return AVATAR_SRCS[(level - 1) % AVATAR_SRCS.length]; }
 
 boardEl.addEventListener("click", (event) => {
   const target = event.target.closest(".cell"); if (!target) return;
